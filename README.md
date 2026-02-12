@@ -9,7 +9,7 @@ A custom card showing a meteogram with wind barbs, powered by Met.no API or Home
 
 ---
 
-![Meteogram Card](https://raw.githubusercontent.com/jm-cook/lovelace-meteogram-card/main/images/meteogram-card.png)
+![Meteogram Card](https://raw.githubusercontent.com/DTekNO/lovelace-meteogram-card/main/images/meteogram-card.png)
 
 ## Features
 
@@ -335,14 +335,14 @@ For developers, the Meteogram Card is built with TypeScript and uses modern web 
 
 <!-- Badges and links -->
 [hacs-badge]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square
-[release-badge]: https://img.shields.io/github/v/release/jm-cook/lovelace-meteogram-card?style=flat-square
-[downloads-badge]: https://img.shields.io/github/downloads/jm-cook/lovelace-meteogram-card/total?style=flat-square
+[release-badge]: https://img.shields.io/github/v/release/DTekNO/lovelace-meteogram-card?style=flat-square
+[downloads-badge]: https://img.shields.io/github/downloads/DTekNO/lovelace-meteogram-card/total?style=flat-square
 [hacs-url]: https://github.com/hacs/integration
 
-[maintenance-badge]: https://img.shields.io/maintenance/yes/2025.svg?style=flat-square
-[release-url]: https://github.com/jm-cook/lovelace-meteogram-card/releases
-[devdoc-url]: https://github.com/jm-cook/lovelace-meteogram-card/blob/main/doc/DEV.md
-[styledoc-url]: https://github.com/jm-cook/lovelace-meteogram-card/blob/main/doc/STYLES.md
+[maintenance-badge]: https://img.shields.io/maintenance/yes/2026.svg?style=flat-square
+[release-url]: https://github.com/DTekNO/lovelace-meteogram-card/releases
+[devdoc-url]: https://github.com/DTekNO/lovelace-meteogram-card/blob/main/doc/DEV.md
+[styledoc-url]: https://github.com/DTekNO/lovelace-meteogram-card/blob/main/doc/STYLES.md
 
 ## Default Configuration Properties
 

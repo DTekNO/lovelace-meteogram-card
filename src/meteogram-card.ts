@@ -106,7 +106,7 @@ window.customElements.get("meteogram-card") ||
   description: "A custom card showing a meteogram with wind barbs.",
   version: version,
   preview:
-    "https://github.com/jm-cook/lovelace-meteogram-card/blob/main/images/meteogram-card.png",
+    "https://github.com/DTekNO/lovelace-meteogram-card/blob/main/images/meteogram-card.png",
   documentationURL:
-    "https://github.com/jm-cook/lovelace-meteogram-card/blob/main/README.md",
+    "https://github.com/DTekNO/lovelace-meteogram-card/blob/main/README.md",
 });

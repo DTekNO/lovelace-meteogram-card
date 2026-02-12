@@ -49,7 +49,7 @@ styles:
 - Update any automations or scripts that set styles accordingly.
 - See the README and STYLES.md for full details and migration instructions.
 
-**Full Changelog**: https://github.com/jm-cook/lovelace-meteogram-card/compare/v3.0.3...v3.1.3
+**Full Changelog**: https://github.com/DTekNO/lovelace-meteogram-card/compare/v3.0.3...v3.1.3
 
 ---
 

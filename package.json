@@ -13,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jm-cook/lovelace-meteogram-card.git"
+    "url": "git+https://github.com/DTekNO/lovelace-meteogram-card.git"
   },
   "keywords": [
     "home-assistant",

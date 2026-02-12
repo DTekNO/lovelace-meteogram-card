@@ -7,7 +7,7 @@ Feedback and contributions are welcome to further improve the card's capabilitie
 
 If you have a feature request, bug report, or improvement suggestion, please open an issue on the GitHub repository, or why not contribute directly with a pull request?
 
-[GitHub Issue Tracker](https://github.com/jm-cook/lovelace-meteogram-card/issues)
+[GitHub Issue Tracker](https://github.com/DTekNO/lovelace-meteogram-card/issues)
 
 
 ## Logging and Status Panel

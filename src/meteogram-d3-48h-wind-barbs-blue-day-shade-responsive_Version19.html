@@ -63,7 +63,7 @@
       const statusEl = document.getElementById('status');
       statusEl.textContent = "Fetching...";
       fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`, {
-        headers: { 'User-Agent': 'meteogram-demo/1.0 jm-cook@github' }
+        headers: { 'User-Agent': 'meteogram-demo/1.0 DTekNO@github' }
       })
       .then(res => res.json())
       .then(data => {
