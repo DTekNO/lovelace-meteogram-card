@@ -268,7 +268,7 @@ export class MeteogramCardEditor extends LitElement implements MeteogramCardEdit
         ></ha-textfield>
 
         <ha-textfield
-          label="${trnslt(hass, "ui.editor.meteogram.altitude", "Altitude (meters)")}"
+          label="${trnslt(hass, "ui.editor.meteogram.altitude", "Altitude")}"
           id="altitude-input"
           type="number"
           step="any"
@@ -331,7 +331,7 @@ export class MeteogramCardEditor extends LitElement implements MeteogramCardEdit
         </div>
       
         <div class="toggle-row">
-          <div class="toggle-label">Display Mode</div>
+          <div class="toggle-label">${trnslt(hass, "ui.editor.meteogram.display_mode", "Display Mode")}</div>
           <select id="display-mode-select">
             <option value="full" ${displayMode === "full" ? "selected" : ""}>Full (all features)</option>
             <option value="core" ${displayMode === "core" ? "selected" : ""}>Core (dates & numbers only)</option>
