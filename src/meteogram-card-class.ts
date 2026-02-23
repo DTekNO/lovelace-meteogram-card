@@ -1467,6 +1467,18 @@ export class MeteogramCard extends LitElement {
         this._statusApiSuccess = false;
         let diag = weatherApi.getDiagnosticText();
         this._debugLog(`[${CARD_NAME}] WeatherAPI diagnostic:`, diag);
+        
+        // Check if WeatherAPI has cached data from localStorage that we can use
+        // The WeatherAPI loads cache in getForecastData(), so check its internal _forecastData
+        const cachedData = (weatherApi as any)._forecastData;
+        if (cachedData) {
+          console.warn(`[${CARD_NAME}] API error, but using cached forecast data from localStorage to keep chart visible`);
+          // Store error message but return cached data
+          this.setError(diag);
+          return cachedData;
+        }
+        
+        // No cached data available - fail normally
         this.setError(diag);
         this.logErrorContext("fetchWeatherData", error);
         throw new Error(
@@ -2692,10 +2704,12 @@ export class MeteogramCard extends LitElement {
 
     // In Focussed mode, hide title and attribution
     if (this.displayMode === "focussed" || this.focussed) {
+      // Check if we have cached data in WeatherAPI
+      const hasCachedData = this._weatherApiInstance && (this._weatherApiInstance as any)._forecastData;
       return html`
         <ha-card style="${styleVars}">
           <div class="card-content">
-            ${this.meteogramError
+            ${this.meteogramError && !hasCachedData
               ? html`<div
                   class="error"
                   style="white-space:normal;"
@@ -2721,6 +2735,7 @@ export class MeteogramCard extends LitElement {
       attributionColor = "#fbc02d"; // orange
     } else if (this._statusApiSuccess === false) {
       attributionColor = "#b71c1c"; // red
+      statusSymbol = "⚠️"; // Alert icon when there's an error
     }
     // Attribution tooltip content
     let attributionTooltip = "";
@@ -2797,6 +2812,11 @@ export class MeteogramCard extends LitElement {
                         <span style='color:#888;'>(${this.entityId})</span>
                     </div>
                     ${
+                      this.meteogramError && (this._weatherApiInstance && (this._weatherApiInstance as any)._forecastData)
+                        ? `<div style='margin-top:8px;padding:8px;background:#ffebee;border-left:4px solid #b71c1c;color:#b71c1c;font-size:0.97em;border-radius:4px;'><b>⚠️ API Error (showing cached data):</b><br><span style='color:#555;'>${this.meteogramError}</span></div>`
+                        : ""
+                    }
+                    ${
                       this._missingForecastKeys &&
                       this._missingForecastKeys.length > 0
                         ? `<div style='margin-top:8px;color:#b71c1c;font-size:0.97em;'><b>Missing data:</b> ${this._missingForecastKeys.join(
@@ -2819,6 +2839,11 @@ export class MeteogramCard extends LitElement {
                         Weather data from <a href='https://www.met.no/en' target='_blank' rel='noopener' style='color:inherit;text-decoration:underline;'>the Norwegian Meteorological Institute (MET Norway)</a>,
                         licensed under <a href='https://creativecommons.org/licenses/by/4.0/' target='_blank' rel='noopener' style='color:inherit;text-decoration:underline;'>CC BY 4.0</a>
                     </div>
+                    ${
+                      this.meteogramError && (this._weatherApiInstance && (this._weatherApiInstance as any)._forecastData)
+                        ? `<div style='margin-top:8px;padding:8px;background:#ffebee;border-left:4px solid #b71c1c;color:#b71c1c;font-size:0.97em;border-radius:4px;'><b>⚠️ API Error (showing cached data):</b><br><span style='color:#555;'>${this.meteogramError}</span></div>`
+                        : ""
+                    }
                     ${
                       this._missingForecastKeys &&
                       this._missingForecastKeys.length > 0
@@ -2869,7 +2894,7 @@ export class MeteogramCard extends LitElement {
                 </div>
               `
             : ""}
-          ${this.meteogramError
+          ${this.meteogramError && !(this._weatherApiInstance && (this._weatherApiInstance as any)._forecastData)
             ? html`<div
                 class="error"
                 style="white-space:normal;"
