@@ -65,19 +65,62 @@ export class MeteogramCard extends LitElement {
     this.showWind = true;
     this.denseWeatherIcons = true;
     this.meteogramHours = "48h";
-    this.styles = {};
-    this.diagnostics = DIAGNOSTICS_DEFAULT;
-    this.debug = false;
-    // Initialize state properties
-    this.chartLoaded = false;
-    this.meteogramError = "";
-    this.errorCount = 0;
-    this.lastErrorTime = 0;
-    this._statusExpiresAt = "";
-    this._statusLastRender = "";
-    this._statusLastFetch = "";
-    this._statusApiSuccess = null;
   }
+
+  /**
+   * Parse meteogram_hours config to get desired hours
+   * Supports both legacy string format ("48h") and new numeric format (120)
+   * Returns the target hours value (not data points)
+   */
+  private parseHoursConfig(config: string | number | undefined): number | "max" {
+    const value = config || "48h";
+    
+    // Handle numeric format (new)
+    if (typeof value === 'number') {
+      return Math.max(1, value);
+    }
+    
+    // Handle string format (legacy)
+    if (value === "max") {
+      return "max";
+    }
+    
+    // Parse legacy "XXh" format or plain numbers as strings
+    const match = value.match(/^(\d+)h?$/);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+    
+    // Fallback
+    this._debugLog('⚠️ Invalid meteogram_hours value, using default 48h');
+    return 48;
+  }
+
+  /**
+   * Calculate how many data points are needed to cover the requested hours
+   * Handles mixed-resolution data (hourly then 6-hourly)
+   * Rounds up to include the timeslot containing the target end time
+   */
+  private getDataPointsForHours(targetHours: number | "max", timeArray: Date[]): number {
+    if (targetHours === "max" || timeArray.length === 0) {
+      return timeArray.length;
+    }
+    
+    const startTime = timeArray[0].getTime();
+    const targetEndTime = startTime + (targetHours * 60 * 60 * 1000);
+    
+    // Find the first data point that reaches or exceeds the target hours
+    // This ensures we include the complete timeslot containing the end point
+    for (let i = 0; i < timeArray.length; i++) {
+      if (timeArray[i].getTime() >= targetEndTime) {
+        return i + 1; // Include this timeslot
+      }
+    }
+    
+    // If target hours exceeds available data, return all points
+    return timeArray.length;
+  }
+
   @property({ type: String }) title = "";
   @property({ type: Number }) latitude?: number;
   @property({ type: Number }) longitude?: number;
@@ -89,7 +132,7 @@ export class MeteogramCard extends LitElement {
   @property({ type: Boolean }) showWeatherIcons = true;
   @property({ type: Boolean }) showWind = true;
   @property({ type: Boolean }) denseWeatherIcons = true; // NEW: icon density config
-  @property({ type: String }) meteogramHours: string = "48h"; // Default is now 48h
+  @property({ type: String }) meteogramHours: string | number = "48h"; // Default is now 48h
   @property({ type: Object }) styles: MeteogramStyleConfig = {}; // NEW: styles override
   @property({ type: Boolean }) diagnostics: boolean = DIAGNOSTICS_DEFAULT; // Initialize here
   @property({ type: Boolean }) debug: boolean = false; // Debug logging (undocumented)
@@ -521,6 +564,16 @@ export class MeteogramCard extends LitElement {
   // Handle initial setup - now properly setup resize observer
   connectedCallback() {
     super.connectedCallback();
+    
+    // Initialize internal state variables (NOT config properties)
+    this.chartLoaded = false;
+    this.meteogramError = "";
+    this.errorCount = 0;
+    this.lastErrorTime = 0;
+    this._statusExpiresAt = "";
+    this._statusLastRender = "";
+    this._statusLastFetch = "";
+    this._statusApiSuccess = null;
     this._isInitialized = false;
 
     // Wait for DOM to be ready before setting up observers
@@ -1417,15 +1470,10 @@ export class MeteogramCard extends LitElement {
         // Store units from API
         this._currentUnits = result && result.units ? result.units : {};
         // Filter result by meteogramHours
-        let hours = 48;
-        if (this.meteogramHours === "8h") hours = 8;
-        else if (this.meteogramHours === "12h") hours = 12;
-        else if (this.meteogramHours === "24h") hours = 24;
-        else if (this.meteogramHours === "48h") hours = 48;
-        else if (this.meteogramHours === "54h") hours = 54;
-        else if (this.meteogramHours === "max") hours = result.time.length;
+        const targetHours = this.parseHoursConfig(this.meteogramHours);
+        const dataPoints = this.getDataPointsForHours(targetHours, result.time);
 
-        // Only keep the first N hours
+        // Only keep the first N data points
         // Only slice array properties, not units or fetchTimestamp
         const arrayKeys = [
           "pressure",
@@ -1441,7 +1489,7 @@ export class MeteogramCard extends LitElement {
         ];
         arrayKeys.forEach((key) => {
           if (Array.isArray((result as any)[key])) {
-            (result as any)[key] = (result as any)[key].slice(0, hours);
+            (result as any)[key] = (result as any)[key].slice(0, dataPoints);
           }
         });
         // this._scheduleDrawMeteogram();
@@ -1807,13 +1855,8 @@ export class MeteogramCard extends LitElement {
             useAspectRatio ? "xMidYMid meet" : "none"
           ); // Fill container, no aspect ratio
 
-        let hours = 48;
-        if (this.meteogramHours === "8h") hours = 8;
-        else if (this.meteogramHours === "12h") hours = 12;
-        else if (this.meteogramHours === "24h") hours = 24;
-        else if (this.meteogramHours === "48h") hours = 48;
-        else if (this.meteogramHours === "54h") hours = 54;
-        else if (this.meteogramHours === "max") hours = data.time.length;
+        const targetHours = this.parseHoursConfig(this.meteogramHours);
+        const dataPoints = this.getDataPointsForHours(targetHours, data.time);
 
         const sliceData = <T>(arr: T[] | undefined): T[] => {
           if (!arr || !Array.isArray(arr)) {
@@ -1822,7 +1865,7 @@ export class MeteogramCard extends LitElement {
             );
             return [];
           }
-          return arr.slice(0, Math.min(hours, arr.length) + 1);
+          return arr.slice(0, Math.min(dataPoints, arr.length) + 1);
         };
         // Debug: Check which properties might be undefined
         const dataProperties = [

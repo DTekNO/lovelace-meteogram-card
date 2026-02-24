@@ -343,13 +343,23 @@ export class MeteogramCardEditor extends LitElement implements MeteogramCardEdit
       <div class="row">
         <label for="meteogram-hours-select" style="margin-right:8px;">${trnslt(hass, "ui.editor.meteogram.meteogram_length", "Meteogram Length")}</label>
         <select id="meteogram-hours-select">
-          <option value="8h" ${meteogramHours === "8h" ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_8", "8 hours")}</option>
-          <option value="12h" ${meteogramHours === "12h" ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_12", "12 hours")}</option>
-          <option value="24h" ${meteogramHours === "24h" ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_24", "24 hours")}</option>
-          <option value="48h" ${meteogramHours === "48h" ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_48", "48 hours")}</option>
-          <option value="54h" ${meteogramHours === "54h" ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_54", "54 hours")}</option>
+          <option value="8" ${meteogramHours === "8h" || meteogramHours === 8 ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_8", "8 hours")}</option>
+          <option value="12" ${meteogramHours === "12h" || meteogramHours === 12 ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_12", "12 hours")}</option>
+          <option value="24" ${meteogramHours === "24h" || meteogramHours === 24 ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_24", "24 hours")}</option>
+          <option value="48" ${meteogramHours === "48h" || meteogramHours === 48 ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_48", "48 hours")}</option>
+          <option value="72" ${meteogramHours === 72 ? "selected" : ""}>72 hours</option>
+          <option value="96" ${meteogramHours === 96 ? "selected" : ""}>96 hours</option>
+          <option value="120" ${meteogramHours === 120 ? "selected" : ""}>120 hours</option>
           <option value="max" ${meteogramHours === "max" ? "selected" : ""}>${trnslt(hass, "ui.editor.meteogram.hours_max", "Max available")}</option>
+          <option value="custom" ${typeof meteogramHours === 'number' && ![8,12,24,48,72,96,120].includes(meteogramHours) ? "selected" : ""}>Custom...</option>
         </select>
+      </div>
+      <div class="row custom-hours-row" style="display: ${typeof meteogramHours === 'number' && ![8,12,24,48,72,96,120].includes(meteogramHours) ? 'flex' : 'none'}; align-items: center; gap: 8px; margin-top: 8px;">
+        <label for="custom-hours-input" style="margin-right:8px;">Custom hours:</label>
+        <input type="number" id="custom-hours-input" min="1" max="999" step="1" 
+               value="${typeof meteogramHours === 'number' ? meteogramHours : 48}" 
+               style="width: 80px; padding: 4px;">
+        <span style="color: var(--secondary-text-color); font-size: 0.9em;">hours</span>
       </div>
       <p class="help-text">${trnslt(hass, "ui.editor.meteogram.choose_hours", "Choose how many hours to show in the meteogram")}</p>
 
@@ -464,10 +474,46 @@ export class MeteogramCardEditor extends LitElement implements MeteogramCardEdit
             }
 
             const meteogramHoursSelect = this.querySelector('#meteogram-hours-select') as ConfigurableHTMLElement;
+            const customHoursRow = this.querySelector('.custom-hours-row') as HTMLElement;
+            const customHoursInput = this.querySelector('#custom-hours-input') as ConfigurableHTMLElement;
+            
             if (meteogramHoursSelect) {
                 meteogramHoursSelect.configValue = 'meteogram_hours';
-                meteogramHoursSelect.addEventListener('change', this._valueChanged.bind(this));
+                meteogramHoursSelect.addEventListener('change', (ev) => {
+                    const value = (ev.target as HTMLSelectElement).value;
+                    
+                    // Show/hide custom hours input
+                    if (customHoursRow) {
+                        customHoursRow.style.display = value === 'custom' ? 'flex' : 'none';
+                    }
+                    
+                    // If "custom" is selected, focus on the custom input and use its value
+                    if (value === 'custom') {
+                        if (customHoursInput) {
+                            customHoursInput.focus();
+                            // Use the custom input value
+                            const customValue = parseInt((customHoursInput as HTMLInputElement).value, 10);
+                            if (!isNaN(customValue)) {
+                                this._updateConfig('meteogram_hours', customValue);
+                            }
+                        }
+                    } else {
+                        // Use the selected preset (convert to numeric or keep "max")
+                        const configValue = value === 'max' ? 'max' : parseInt(value, 10);
+                        this._updateConfig('meteogram_hours', configValue);
+                    }
+                });
                 this._elements.set('meteogram_hours', meteogramHoursSelect);
+            }
+            
+            if (customHoursInput) {
+                customHoursInput.configValue = 'meteogram_hours';
+                customHoursInput.addEventListener('input', (ev) => {
+                    const value = parseInt((ev.target as HTMLInputElement).value, 10);
+                    if (!isNaN(value) && value > 0) {
+                        this._updateConfig('meteogram_hours', value);
+                    }
+                });
             }
 
             const diagnosticsSwitch = this.querySelector('#diagnostics') as ConfigurableHTMLElement;

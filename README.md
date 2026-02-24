@@ -123,7 +123,7 @@ Below are the main configuration options for the Meteogram Card:
 | show_weather_icons  | boolean  | true            | Show/hide weather icons                                                                           |
 | show_wind           | boolean  | true            | Show/hide wind barbs section                                                                      |
 | dense_weather_icons | boolean  | true            | Show weather icons every hour (true) or every 2 hours (false)                                     |
-| meteogram_hours     | string   | "48h"           | Number of hours to display in the meteogram (`8h`, `12h`, `24h`, `48h`, `54h`, or `max`)          |
+| meteogram_hours     | string or number | "48h"   | Hours to display: preset strings (`"8h"`, `"12h"`, `"24h"`, `"48h"`, `"max"`), or any number (e.g., `120` for 120 hours) |
 | aspect_ratio        | string   | "16:9"          | Aspect ratio for the chart (e.g., "16:9", "4:3"). Only applies in panel/grid layout modes.      |
 | layout_mode         | string   | "sections"      | Layout mode for the card: "sections", "panel", or "grid"                                        |
 | diagnostics         | boolean  | false           | Show diagnostics/status panel (for troubleshooting)                                               |
@@ -219,6 +219,15 @@ styles:
 ```yaml
 type: custom:meteogram-card
 display_mode: focussed
+```
+
+#### Example: Custom Hours Display
+```yaml
+type: custom:meteogram-card
+meteogram_hours: 120  # Show 120 hours (5 days)
+# Or use preset string format:
+# meteogram_hours: "48h"
+# meteogram_hours: "max"
 ```
 
 #### Example: Panel Layout with Custom Aspect Ratio

@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Custom hours display**: The `meteogram_hours` configuration option now accepts arbitrary numeric values (e.g., `120` for 120 hours) in addition to the previous string format (e.g., `"48h"`)
+- Enhanced editor UI with dropdown presets (8h, 12h, 24h, 48h, 72h, 96h, 120h, max) and a custom hours input option for any value
+- Full backward compatibility with existing configurations using string format (`"8h"`, `"48h"`, etc.)
+- Time-based calculation for mixed-resolution data: the parser now correctly calculates data points based on actual hours of coverage rather than data point count
+
 ### Fixed
+- **Meteogram hours calculation with mixed-resolution data**: Fixed issue where numeric `meteogram_hours` values (e.g., `90`) were treated as data point counts instead of hours, causing incorrect behavior when forecast data transitions from hourly to 6-hourly intervals
+  - The parser now walks the time array to calculate how many data points are needed to cover the requested hours
+  - Properly handles mixed-resolution data (e.g., 90 hours correctly shows ~59 data points instead of capping at 88)
+  - Always includes the complete timeslot containing the target end time (ceil behavior)
 - **Wind barbs now display correctly across entire forecast period**: Fixed issue where wind barbs disappeared after 48 hours when forecast data transitions from hourly to 6-hourly intervals
 - Wind availability check now correctly validates both wind speed and wind direction data (previously only checked wind speed)
 - Wind barb rendering now adapts to mixed-resolution data: uses 2-hour intervals for hourly data and 12-hour intervals for 6-hourly data

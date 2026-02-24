@@ -136,6 +136,80 @@ for (let i = 0; i < lowResIndices.length; i++) {
 - ❌ Not detecting resolution transitions → inconsistent barb density
 - ✅ Check both wind arrays, use index-based filtering, detect transitions dynamically
 
+### 6. Meteogram Hours Configuration with Mixed-Resolution Data
+
+The `meteogram_hours` config option controls how much forecast data to display. It supports both legacy string format and modern numeric format with backward compatibility.
+
+**Configuration Format:**
+```typescript
+meteogram_hours: 90        // Numeric (hours)
+meteogram_hours: "48h"     // String (legacy)
+meteogram_hours: "max"     // String (all available data)
+```
+
+**Critical Implementation Details:**
+- **Hours vs Data Points**: The config specifies HOURS of coverage, not data point count
+- **Mixed-resolution handling**: Data transitions from hourly (1 point = 1 hour) to 6-hourly (1 point = 6 hours)
+- **Time-based calculation**: Walk the time array to find how many data points cover the requested hours
+- **Ceil behavior**: Always include the complete timeslot containing the target end time
+
+**Parser Pattern:**
+```typescript
+// Step 1: Parse config to get target hours (number | "max")
+private parseHoursConfig(config: string | number | undefined): number | "max" {
+  const value = config || "48h";
+  if (typeof value === 'number') return Math.max(1, value);
+  if (value === "max") return "max";
+  const match = value.match(/^(\d+)h?$/);
+  if (match) return parseInt(match[1], 10);
+  return 48; // Fallback
+}
+
+// Step 2: Calculate data points needed to cover those hours
+private getDataPointsForHours(targetHours: number | "max", timeArray: Date[]): number {
+  if (targetHours === "max") return timeArray.length;
+  
+  const startTime = timeArray[0].getTime();
+  const targetEndTime = startTime + (targetHours * 60 * 60 * 1000);
+  
+  // Find first data point >= target end time (rounds up)
+  for (let i = 0; i < timeArray.length; i++) {
+    if (timeArray[i].getTime() >= targetEndTime) {
+      return i + 1; // Include this timeslot
+    }
+  }
+  return timeArray.length; // Target exceeds available
+}
+```
+
+**Usage Pattern:**
+```typescript
+// When fetching/filtering data
+const targetHours = this.parseHoursConfig(this.meteogramHours);
+const dataPoints = this.getDataPointsForHours(targetHours, result.time);
+
+// Slice all data arrays
+arrayKeys.forEach((key) => {
+  if (Array.isArray(result[key])) {
+    result[key] = result[key].slice(0, dataPoints);
+  }
+});
+```
+
+**Common Issues:**
+- ❌ Treating data points as hours → fails when resolution changes
+- ❌ Using `Math.min(hours, maxAvailable)` → compares hours to data point count
+- ❌ Not rounding up → may cut off the last timeslot containing target end time
+- ✅ Parse to hours first, then calculate required data points from time array
+- ✅ Include the complete timeslot that reaches or exceeds target hours
+
+**Example Calculation:**
+- Request: 90 hours
+- Available: 88 data points (52 hourly + 36 six-hourly = ~268 hours coverage)
+- Calculation: First 52 points = 52h, need 38 more hours = 7 six-hourly points
+- Result: 52 + 7 = 59 data points (not 88, not 90)
+- Actual coverage: ~90 hours from forecast start
+
 ## Code Style Guidelines
 
 ### TypeScript Patterns
