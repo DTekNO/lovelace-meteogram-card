@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The parser now walks the time array to calculate how many data points are needed to cover the requested hours
   - Properly handles mixed-resolution data (e.g., 90 hours correctly shows ~59 data points instead of capping at 88)
   - Always includes the complete timeslot containing the target end time (ceil behavior)
+- **Improved label spacing for longer time ranges**: Fixed overlapping time labels along the bottom axis and rain labels, particularly noticeable in locales with longer time strings (e.g., German "14 Uhr")
+  - Time labels now use `.getHours()` method directly for locale-independent hour values (always 0-23, no formatting issues)
+  - Implemented dynamic label spacing based on measured text width instead of fixed intervals
+  - Rain labels are now intelligently filtered to prevent overlap, prioritizing higher precipitation values
+  - All label spacing adapts automatically to available space
 - **Wind barbs now display correctly across entire forecast period**: Fixed issue where wind barbs disappeared after 48 hours when forecast data transitions from hourly to 6-hourly intervals
 - Wind availability check now correctly validates both wind speed and wind direction data (previously only checked wind speed)
 - Wind barb rendering now adapts to mixed-resolution data: uses 2-hour intervals for hourly data and 12-hour intervals for 6-hourly data

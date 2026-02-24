@@ -136,27 +136,165 @@ export class MeteogramChart {
             .attr("stroke-width", 3);
     }
 
-    drawBottomHourLabels(svg: any, time: Date[], margin: any, x: any, windBandHeight: number, width: number) {
+    drawBottomHourLabels(svg: any, time: Date[], margin: any, x: any, windBandHeight: number, _width: number) {
         const hourLabelY = margin.top + this.card._chartHeight + windBandHeight + 15;
+        
+        // Detect transition from hourly to 6-hourly data
+        let transitionIdx = time.length;
+        for (let i = 1; i < time.length - 1; i++) {
+            const interval1 = (time[i].getTime() - time[i - 1].getTime()) / (1000 * 60 * 60);
+            const interval2 = (time[i + 1].getTime() - time[i].getTime()) / (1000 * 60 * 60);
+            
+            if (interval1 <= 1.5 && interval2 > 3) {
+                transitionIdx = i + 1;
+                break;
+            }
+        }
+        
+        // Create a temporary text element to measure label widths
+        const tempText = svg.append("text")
+            .attr("class", "bottom-hour-label")
+            .style("visibility", "hidden");
+        
+        // Format all hour strings and measure their widths
+        const labelData = time.map((d: Date, i: number) => {
+            const hourStr = d.getHours().toString();
+            tempText.text(hourStr);
+            const bbox = (tempText.node() as SVGTextElement).getBBox();
+            
+            return {
+                index: i,
+                hour: d.getHours(),
+                hourStr: hourStr,
+                xPos: margin.left + x(i),
+                width: bbox.width,
+                isHighRes: i < transitionIdx
+            };
+        });
+        
+        tempText.remove();
+        
+        const avgLabelWidth = labelData.reduce((sum, d) => sum + d.width, 0) / labelData.length;
+        const minSpacing = avgLabelWidth + 8;
+        
+        // Separate high-res and low-res sections
+        const highResLabels = labelData.filter(d => d.isHighRes);
+        const lowResLabels = labelData.filter(d => !d.isHighRes);
+        
+        const labelsToShow: number[] = [];
+        
+        // Strategy: Start from low-res section (establish pattern at day boundaries),
+        // then work backwards into high-res section with compatible interval
+        
+        let patternHours: number[] = [];
+        
+        // Low-res section: establish pattern based on day boundaries
+        if (lowResLabels.length > 0) {
+            // Find labels at or near day boundaries (hour 0 or close to it)
+            const dayBoundaries = lowResLabels.filter(d => {
+                const distToMidnight = Math.min(Math.abs(d.hour - 0), Math.abs(d.hour - 24));
+                return distToMidnight <= 6; // Within 6 hours of midnight
+            });
+            
+            if (dayBoundaries.length > 0) {
+                // Use hour from first day boundary as anchor
+                const anchorHour = dayBoundaries[0].hour;
+                
+                // Show every 12 hours in low-res (every 2nd 6-hour point)
+                const lowResPattern = lowResLabels.filter((d) => {
+                    // Check if this hour matches the pattern: anchor + 0h or anchor + 12h
+                    const hourDiff = (d.hour - anchorHour + 24) % 24;
+                    return hourDiff === 0 || hourDiff === 12;
+                });
+                
+                // Verify spacing
+                let spacingOk = true;
+                if (lowResPattern.length >= 2) {
+                    for (let i = 1; i < lowResPattern.length; i++) {
+                        const spacing = lowResPattern[i].xPos - lowResPattern[i - 1].xPos;
+                        if (spacing < minSpacing) {
+                            spacingOk = false;
+                            break;
+                        }
+                    }
+                }
+                
+                if (spacingOk && lowResPattern.length > 0) {
+                    lowResPattern.forEach(d => labelsToShow.push(d.index));
+                    // Establish the hour pattern for high-res section
+                    patternHours = [anchorHour, (anchorHour + 12) % 24];
+                } else {
+                    // Fallback: show only at day boundaries
+                    dayBoundaries.forEach(d => labelsToShow.push(d.index));
+                    patternHours = [dayBoundaries[0].hour];
+                }
+            } else {
+                // No clear day boundaries, use every other low-res point
+                for (let i = 0; i < lowResLabels.length; i += 2) {
+                    labelsToShow.push(lowResLabels[i].index);
+                }
+                if (lowResLabels.length > 0) {
+                    patternHours = [lowResLabels[0].hour];
+                }
+            }
+        }
+        
+        // High-res section: match the pattern established in low-res
+        if (highResLabels.length > 0 && patternHours.length > 0) {
+            // Try 2-hour intervals that align with the low-res pattern
+            const anchorHour = patternHours[0];
+            
+            // Test different intervals (2h, 3h, 4h) that maintain alignment
+            const intervals = [2, 3, 4];
+            let selectedHighRes: typeof highResLabels = [];
+            
+            for (const interval of intervals) {
+                // Filter to hours that match: anchorHour + N * interval (mod 24)
+                const candidates = highResLabels.filter(d => {
+                    const hourDiff = (d.hour - anchorHour + 24) % 24;
+                    return hourDiff % interval === 0;
+                });
+                
+                if (candidates.length < 2) continue;
+                
+                // Check spacing
+                let hasEnoughSpace = true;
+                for (let i = 1; i < candidates.length; i++) {
+                    const spacing = candidates[i].xPos - candidates[i - 1].xPos;
+                    if (spacing < minSpacing) {
+                        hasEnoughSpace = false;
+                        break;
+                    }
+                }
+                
+                if (hasEnoughSpace) {
+                    selectedHighRes = candidates;
+                    break;
+                }
+            }
+            
+            if (selectedHighRes.length > 0) {
+                selectedHighRes.forEach(d => labelsToShow.push(d.index));
+            } else {
+                // Fallback: show first and last high-res labels
+                labelsToShow.push(highResLabels[0].index);
+                if (highResLabels.length > 1) {
+                    labelsToShow.push(highResLabels[highResLabels.length - 1].index);
+                }
+            }
+        }
+        
+        // Draw labels
         svg.selectAll(".bottom-hour-label")
-            .data(time)
+            .data(labelData)
             .enter()
             .append("text")
             .attr("class", "bottom-hour-label")
-            .attr("x", (_: Date, i: number) => margin.left + x(i))
+            .attr("x", (d: any) => d.xPos)
             .attr("y", hourLabelY)
             .attr("text-anchor", "middle")
-            .text((d: Date, i: number) => {
-                const haLocale = this.card.getHaLocale();
-                const hour = d.toLocaleTimeString(haLocale, {hour: "2-digit", hour12: false});
-                if (width < 400) {
-                    return i % 6 === 0 ? hour : "";
-                } else if (width > 800) {
-                    return i % 2 === 0 ? hour : "";
-                } else {
-                    return i % 3 === 0 ? hour : "";
-                }
-            });
+            .attr("opacity", (d: any) => labelsToShow.includes(d.index) ? 1 : 0)
+            .text((d: any) => d.hourStr);
     }
 
     drawTemperatureLine(chart: any, temperature: (number|null)[], x: any, yTemp: any, legendX?: number, legendY?: number) {
@@ -485,47 +623,125 @@ export class MeteogramChart {
         // Add main rain labels (show if rain > 0) - filter out null values
         const rainLabelData = rain.slice(0, N - 1).map((d, i) => ({ value: d, index: i })).filter(d => d.value !== null && d.value > 0);
         
+        // Measure label widths and determine which to show
+        const tempRainText = chart.append("text")
+            .attr("class", "rain-label")
+            .style("visibility", "hidden");
+        
+        const rainLabelsWithWidth = rainLabelData.map((d: any) => {
+            const labelText = d.value < 1 ? d.value.toFixed(1) : d.value.toFixed(0);
+            tempRainText.text(labelText);
+            const bbox = (tempRainText.node() as SVGTextElement).getBBox();
+            return {
+                ...d,
+                labelText,
+                xPos: x(d.index) + dx / 2,
+                width: bbox.width
+            };
+        });
+        
+        tempRainText.remove();
+        
+        // Sort by value (descending) to prioritize showing higher values
+        const sortedRainLabels = [...rainLabelsWithWidth].sort((a, b) => b.value - a.value);
+        
+        // Determine which labels to show (avoid overlaps)
+        const minGap = 4; // Minimum pixels between rain labels
+        const rainLabelsToShow = new Set<number>();
+        const occupiedRanges: Array<{start: number, end: number}> = [];
+        
+        for (const label of sortedRainLabels) {
+            const labelStart = label.xPos - label.width / 2;
+            const labelEnd = label.xPos + label.width / 2;
+            
+            // Check if this label overlaps with any already shown label
+            const overlaps = occupiedRanges.some(range => 
+                (labelStart - minGap < range.end) && (labelEnd + minGap > range.start)
+            );
+            
+            if (!overlaps) {
+                rainLabelsToShow.add(label.index);
+                occupiedRanges.push({start: labelStart, end: labelEnd});
+            }
+        }
+        
         chart.selectAll(".rain-label")
-            .data(rainLabelData)
+            .data(rainLabelsWithWidth)
             .enter()
             .append("text")
             .attr("class", "rain-label")
-            .attr("x", (d: any) => x(d.index) + dx / 2)
+            .attr("x", (d: any) => d.xPos)
             .attr("y", (d: any) => {
                 const h = this.card._chartHeight - yPrecip(d.value);
                 const scaledH = h < 2 && d.value > 0 ? 2 : h * 0.7;
                 return yPrecip(0) - scaledH - 4; // 4px above the top of the bar
             })
-            .text((d: any) => {
-                if (d.value <= 0) return "";
-                return d.value < 1 ? d.value.toFixed(1) : d.value.toFixed(0);
-            })
-            .attr("opacity", (d: any) => d.value > 0 ? 1 : 0);
+            .attr("text-anchor", "middle")
+            .text((d: any) => d.labelText)
+            .attr("opacity", (d: any) => rainLabelsToShow.has(d.index) ? 1 : 0);
 
         // Add max rain labels (only if precipitation min/max data is available)
         if (this.card._dataAvailability.precipitationMinMax) {
             const rainMaxLabelData = rainMax.slice(0, N - 1).map((d, i) => ({ value: d, index: i })).filter(d => d.value !== null);
             
+            // Measure label widths and determine which to show
+            const tempMaxText = chart.append("text")
+                .attr("class", "rain-max-label")
+                .style("visibility", "hidden");
+            
+            const rainMaxLabelsWithWidth = rainMaxLabelData.map((d: any) => {
+                const rainValue = rain?.[d.index] ?? 0;
+                const labelText = d.value < 1 ? d.value.toFixed(1) : d.value.toFixed(0);
+                tempMaxText.text(labelText);
+                const bbox = (tempMaxText.node() as SVGTextElement).getBBox();
+                return {
+                    ...d,
+                    rainValue,
+                    labelText,
+                    xPos: x(d.index) + dx / 2,
+                    width: bbox.width,
+                    shouldShow: d.value > rainValue
+                };
+            }).filter((d: any) => d.shouldShow);
+            
+            tempMaxText.remove();
+            
+            // Sort by value (descending) to prioritize showing higher max values
+            const sortedMaxLabels = [...rainMaxLabelsWithWidth].sort((a, b) => b.value - a.value);
+            
+            // Determine which labels to show (avoid overlaps)
+            const minGap = 4;
+            const rainMaxLabelsToShow = new Set<number>();
+            const maxOccupiedRanges: Array<{start: number, end: number}> = [];
+            
+            for (const label of sortedMaxLabels) {
+                const labelStart = label.xPos - label.width / 2;
+                const labelEnd = label.xPos + label.width / 2;
+                
+                const overlaps = maxOccupiedRanges.some(range => 
+                    (labelStart - minGap < range.end) && (labelEnd + minGap > range.start)
+                );
+                
+                if (!overlaps) {
+                    rainMaxLabelsToShow.add(label.index);
+                    maxOccupiedRanges.push({start: labelStart, end: labelEnd});
+                }
+            }
+            
             chart.selectAll(".rain-max-label")
-                .data(rainMaxLabelData)
+                .data(rainMaxLabelsWithWidth)
                 .enter()
                 .append("text")
                 .attr("class", "rain-max-label")
-                .attr("x", (d: any) => x(d.index) + dx / 2)
+                .attr("x", (d: any) => d.xPos)
                 .attr("y", (d: any) => {
                     const h = this.card._chartHeight - yPrecip(d.value);
                     const scaledH = h < 2 && d.value > 0 ? 2 : h * 0.7;
                     return yPrecip(0) - scaledH - 18; // 18px above the top of the max bar
                 })
-                .text((d: any) => {
-                    const rainValue = rain?.[d.index] ?? 0;
-                    if (d.value <= rainValue) return "";
-                    return d.value < 1 ? d.value.toFixed(1) : d.value.toFixed(0);
-                })
-                .attr("opacity", (d: any) => {
-                    const rainValue = rain?.[d.index] ?? 0;
-                    return (d.value > rainValue) ? 1 : 0;
-                });
+                .attr("text-anchor", "middle")
+                .text((d: any) => d.labelText)
+                .attr("opacity", (d: any) => rainMaxLabelsToShow.has(d.index) ? 1 : 0);
         }
 
         // Add precipitation legend if coordinates are provided
