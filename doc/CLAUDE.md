@@ -160,6 +160,83 @@ styles:
 
 **Implementation Note:** CSS only sets `stroke-width` and `fill` for `.temp-line`. The stroke color is applied conditionally in JavaScript to allow gradient to work.
 
+### Wind Barb Rendering
+
+**Mixed-Resolution Data Handling:**
+
+Met.no forecasts transition from hourly data (0-48h) to 6-hourly data (48h+), requiring adaptive rendering:
+
+```typescript
+// Detect transition by checking time intervals
+const intervals: number[] = [];
+for (let i = 1; i < N; i++) {
+  const intervalHours = (time[i].getTime() - time[i-1].getTime()) / (1000 * 60 * 60);
+  intervals.push(intervalHours);
+}
+
+// Find where interval jumps from ~1h to 6h
+let transitionIdx = N;
+for (let i = 1; i < intervals.length; i++) {
+  if (intervals[i-1] < 3 && intervals[i] >= 4) {
+    transitionIdx = i;
+    break;
+  }
+}
+```
+
+**Rendering Strategy:**
+
+1. **High-resolution section (hourly data):**
+   - Find even-hour indices: `time[i].getHours() % 2 === 0`
+   - Place wind barbs between consecutive even hours
+   - Results in barbs every 2 hours
+
+2. **Low-resolution section (6-hourly data):**
+   - Use every other data point: `i % 2 === 0`
+   - Place wind barbs directly at data points
+   - Results in barbs every 12 hours
+   - **Timezone-agnostic**: Index-based, not time-based
+
+**Data Availability Check:**
+```typescript
+// CRITICAL: Check BOTH speed AND direction
+this._dataAvailability.wind =
+  Array.isArray(data.windSpeed) &&
+  data.windSpeed.some((val) => val !== null && typeof val === "number") &&
+  Array.isArray(data.windDirection) &&
+  data.windDirection.some((val) => val !== null && typeof val === "number");
+```
+
+**Why This Matters:**
+- Wind barbs require both speed and direction to render
+- Previously only checked `windSpeed`, causing barbs to disappear when `windDirection` was present but `windGust` was null
+- The rendering code at line 759 of meteogram-chart.ts skips if either is missing:
+  ```typescript
+  if (typeof speed !== 'number' || typeof dir !== 'number' || isNaN(speed) || isNaN(dir)) continue;
+  ```
+
+**Responsive Behavior:**
+- Normal screens: Show all calculated positions
+- Narrow screens (`width < 400`):
+  - Hourly section: Skip odd indices (every 4 hours)
+  - 6-hourly section: Show every 4th point (every 24 hours)
+
+**Wind Speed Conversions:**
+- All speeds converted to knots for barb calculation (meteorological standard)
+- Barb length scales with speed using `d3.scaleLinear()`
+- Domain: `[0, max(15, maxWindSpeed)]`
+- Range: `[18-23, 30-38]` pixels based on screen width
+
+**Gust Handling:**
+- Gusts drawn as orange feathers on left side of barb
+- Only shown when `gust > sustainedSpeed`
+- Gracefully handles null gusts (common after 48h):
+  ```typescript
+  const gustInKnots = typeof gust === 'number' && !isNaN(gust) 
+    ? convertWindSpeed(gust, windSpeedUnit, "kt") 
+    : null;
+  ```
+
 ## Debug Logging System
 
 **Three-Tier Approach:**

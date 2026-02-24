@@ -1527,7 +1527,9 @@ export class MeteogramCard extends LitElement {
 
     this._dataAvailability.wind =
       Array.isArray(data.windSpeed) &&
-      data.windSpeed.some((val) => val !== null && typeof val === "number");
+      data.windSpeed.some((val) => val !== null && typeof val === "number") &&
+      Array.isArray(data.windDirection) &&
+      data.windDirection.some((val) => val !== null && typeof val === "number");
 
     this._dataAvailability.pressure =
       Array.isArray(data.pressure) &&

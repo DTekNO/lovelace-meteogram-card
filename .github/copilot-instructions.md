@@ -78,6 +78,64 @@ The temperature line uses a dynamic SVG gradient centered on 0°C (freezing poin
 - If set, use custom color instead of gradient
 - Never set stroke in CSS (breaks gradient) - apply in JavaScript conditionally
 
+### 5. Wind Barb Rendering for Mixed-Resolution Data
+
+Wind barbs display wind speed and direction using meteorological conventions. The card handles **mixed-resolution data** where forecasts transition from hourly (0-48h) to 6-hourly (48h+) intervals.
+
+**Key Implementation Details:**
+- **Data availability check**: Validate BOTH `windSpeed` AND `windDirection` arrays have non-null values
+  - Previously only checked `windSpeed`, causing barbs to disappear when direction was missing
+  - Wind barbs require both speed and direction to render
+- **Resolution detection**: Detect transition point by comparing time intervals between data points
+  - Hourly data: ~1 hour intervals
+  - 6-hourly data: ~6 hour intervals
+  - Transition typically occurs around index 52-53 in Met.no forecasts
+- **Adaptive rendering**:
+  - **Hourly section**: Place wind barbs between even-hour grid lines (every 2 hours)
+  - **6-hourly section**: Place wind barbs every other data point (every 12 hours)
+- **Timezone-agnostic**: Use index-based filtering (`i % 2 === 0`) rather than absolute time values
+  - Ensures consistent spacing regardless of timezone or data start time
+  - More robust than checking for specific hours like 00:00, 12:00
+
+**Wind Barb Spacing Strategy:**
+```typescript
+// High-resolution (hourly): Every 2 hours
+const highResIndices = [];
+for (let i = 0; i < transitionIdx; i++) {
+  if (time[i].getHours() % 2 === 0) highResIndices.push(i);
+}
+
+// Low-resolution (6-hourly): Every 12 hours = every other point
+for (let i = 0; i < lowResIndices.length; i++) {
+  if (i % 2 === 0) {  // Index-based, not time-based
+    // Draw barb
+  }
+}
+```
+
+**Responsive Rendering:**
+- Normal width: Show all calculated positions
+- Narrow screens (`width < 400`): Skip additional barbs to prevent overlap
+  - Hourly section: Every 4 hours
+  - 6-hourly section: Every 24 hours
+
+**Wind Speed Scaling:**
+- Wind barb length scales with wind speed using `d3.scaleLinear()`
+- Domain: `[0, max(15, maxWindSpeed)]`
+- Range: `[minBarbLen, maxBarbLen]` based on screen width
+- Convert all speeds to knots before drawing (meteorological standard)
+
+**Gust Rendering:**
+- Gust feathers drawn in orange/yellow on left side of barb
+- Only shown when `gust > sustainedSpeed`
+- Gracefully handles null gusts (common after 48h in Met.no data)
+
+**Common Issues:**
+- ❌ Only checking `windSpeed` availability → barbs disappear when `windDirection` missing
+- ❌ Using absolute time checks (e.g., `hour === 12`) → breaks in different timezones
+- ❌ Not detecting resolution transitions → inconsistent barb density
+- ✅ Check both wind arrays, use index-based filtering, detect transitions dynamically
+
 ## Code Style Guidelines
 
 ### TypeScript Patterns

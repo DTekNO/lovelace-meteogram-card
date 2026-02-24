@@ -738,17 +738,52 @@ export class MeteogramChart {
             .attr("y1", 0)
             .attr("y2", windBandHeight);
 
-        // Find the even hours for grid lines first
-        const evenHourIdx: number[] = [];
-        for (let i = 0; i < N; i++) {
-            if (time[i].getHours() % 2 === 0) evenHourIdx.push(i);
+        // Detect where data transitions from hourly to 6-hourly
+        // Check intervals throughout the dataset
+        const intervals: number[] = [];
+        for (let i = 1; i < N; i++) {
+            const intervalHours = (time[i].getTime() - time[i-1].getTime()) / (1000 * 60 * 60);
+            intervals.push(intervalHours);
         }
-
-        // Now place wind barbs exactly in the middle between even hours
+        
+        // Find where transition happens (interval jumps from ~1h to 6h)
+        let transitionIdx = N; // Default: no transition
+        for (let i = 1; i < intervals.length; i++) {
+            if (intervals[i-1] < 3 && intervals[i] >= 4) {
+                transitionIdx = i;
+                break;
+            }
+        }
+        
+        // Build indices for wind barbs
+        const windBarbIndices: number[] = [];
+        
+        // For hourly section: use even hours, place barbs between them
+        const highResIndices: number[] = [];
+        for (let i = 0; i < Math.min(transitionIdx, N); i++) {
+            if (time[i].getHours() % 2 === 0) highResIndices.push(i);
+        }
+        
+        // For 6-hourly section: use all data points directly
+        const lowResIndices: number[] = [];
+        for (let i = transitionIdx; i < N; i++) {
+            lowResIndices.push(i);
+        }
+        
+        // Create wind length scale once for all barbs
+        const minBarbLen = width < 400 ? 18 : 23;
+        const maxBarbLen = width < 400 ? 30 : 38;
+        const windLenScale = d3.scaleLinear()
+            .domain([0, Math.max(15, d3.max(windSpeed.filter(v => typeof v === 'number' && !isNaN(v))) || 20)])
+            .range([minBarbLen, maxBarbLen]);
+        
+        // Now place wind barbs 
         const windBarbY = windBandHeight / 2;
-        for (let idx = 0; idx < evenHourIdx.length - 1; idx++) {
-            const startIdx = evenHourIdx[idx];
-            const endIdx = evenHourIdx[idx + 1];
+        
+        // Draw high-resolution barbs (between even hours)
+        for (let idx = 0; idx < highResIndices.length - 1; idx++) {
+            const startIdx = highResIndices[idx];
+            const endIdx = highResIndices[idx + 1];
             if (width < 400 && idx % 2 !== 0) continue;
             const centerX = (x(startIdx) + x(endIdx)) / 2;
             const dataIdx = Math.floor((startIdx + endIdx) / 2);
@@ -761,13 +796,32 @@ export class MeteogramChart {
             const speedInKnots = convertWindSpeed(speed, windSpeedUnit, "kt");
             const gustInKnots = typeof gust === 'number' && !isNaN(gust) ? convertWindSpeed(gust, windSpeedUnit, "kt") : null;
             
-            const minBarbLen = width < 400 ? 18 : 23;
-            const maxBarbLen = width < 400 ? 30 : 38;
-            const windLenScale = d3.scaleLinear()
-                .domain([0, Math.max(15, d3.max(windSpeed.filter(v => typeof v === 'number' && !isNaN(v))) || 20)])
-                .range([minBarbLen, maxBarbLen]);
             const barbLen = windLenScale(speed);
             this.drawWindBarb(windBand, centerX, windBarbY, speedInKnots, gustInKnots, dir, barbLen, width < 400 ? 0.7 : 0.8);
+        }
+        
+        // Draw low-resolution barbs (every other point for 6-hourly data = 12-hour intervals)
+        for (let i = 0; i < lowResIndices.length; i++) {
+            const dataIdx = lowResIndices[i];
+            
+            // For 6-hourly data, show every other point (12-hour intervals)
+            // This is timezone-agnostic and adapts to when the data starts
+            if (i % 2 !== 0) continue;
+            
+            if (width < 400 && i % 4 !== 0) continue; // On narrow screens, show every 24 hours (every 4th 6-hourly point)
+            
+            const speed = windSpeed[dataIdx];
+            const gust = windGust[dataIdx];
+            const dir = windDirection[dataIdx];
+            
+            if (typeof speed !== 'number' || typeof dir !== 'number' || isNaN(speed) || isNaN(dir)) continue;
+            
+            // Convert wind speeds to knots for proper wind barb calculation
+            const speedInKnots = convertWindSpeed(speed, windSpeedUnit, "kt");
+            const gustInKnots = typeof gust === 'number' && !isNaN(gust) ? convertWindSpeed(gust, windSpeedUnit, "kt") : null;
+            
+            const barbLen = windLenScale(speed);
+            this.drawWindBarb(windBand, x(dataIdx), windBarbY, speedInKnots, gustInKnots, dir, barbLen, width < 400 ? 0.7 : 0.8);
         }
     }
 

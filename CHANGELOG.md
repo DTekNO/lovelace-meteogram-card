@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Wind barbs now display correctly across entire forecast period**: Fixed issue where wind barbs disappeared after 48 hours when forecast data transitions from hourly to 6-hourly intervals
+- Wind availability check now correctly validates both wind speed and wind direction data (previously only checked wind speed)
+- Wind barb rendering now adapts to mixed-resolution data: uses 2-hour intervals for hourly data and 12-hour intervals for 6-hourly data
+- Wind barb spacing is now timezone-agnostic and based on data index offsets rather than absolute time values
+
 ### Changed
 - **Improved resilience during API outages**: When the Met.no API is temporarily unavailable, the card now continues to display the last cached forecast data instead of showing a full-screen error message
 - The card leverages existing localStorage cache to maintain functionality during temporary API failures
@@ -18,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced error handling in `fetchWeatherData()` to return cached data from localStorage when API calls fail
 - Modified render logic to only show full error display when no cached data is available
 - Improved user experience during temporary network issues or Met.no API maintenance windows
+- Wind barb rendering now detects data resolution transition points and adjusts visualization strategy accordingly
 
 ## [3.2.1-beta] - Current
 
