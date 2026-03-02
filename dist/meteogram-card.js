@@ -3133,7 +3133,7 @@ class MeteogramChart {
             .style("visibility", "hidden");
         // Format all hour strings and measure their widths
         const labelData = time.map((d, i) => {
-            const hourStr = d.getHours().toString();
+            const hourStr = d.getHours().toString().padStart(2, '0');
             tempText.text(hourStr);
             const bbox = tempText.node().getBBox();
             return {
@@ -3155,56 +3155,156 @@ class MeteogramChart {
         // Strategy: Start from low-res section (establish pattern at day boundaries),
         // then work backwards into high-res section with compatible interval
         let patternHours = [];
-        // Low-res section: establish pattern based on day boundaries
+        // Low-res section: establish pattern using consistent data point intervals
         if (lowResLabels.length > 0) {
-            // Find labels at or near day boundaries (hour 0 or close to it)
+            // Find labels at or near day boundaries (hour 0 or close to it) to use as starting point
             const dayBoundaries = lowResLabels.filter(d => {
                 const distToMidnight = Math.min(Math.abs(d.hour - 0), Math.abs(d.hour - 24));
-                return distToMidnight <= 6; // Within 6 hours of midnight
+                return distToMidnight <= 1; // Strict midnight check
             });
+            // Determine starting index: prefer midnight, otherwise use first point
+            let startIdx = 0;
+            let anchorHour = lowResLabels[0].hour;
             if (dayBoundaries.length > 0) {
-                // Use hour from first day boundary as anchor
-                const anchorHour = dayBoundaries[0].hour;
-                // Show every 12 hours in low-res (every 2nd 6-hour point)
-                const lowResPattern = lowResLabels.filter((d) => {
-                    // Check if this hour matches the pattern: anchor + 0h or anchor + 12h
-                    const hourDiff = (d.hour - anchorHour + 24) % 24;
-                    return hourDiff === 0 || hourDiff === 12;
-                });
+                // Find the index in lowResLabels array
+                startIdx = lowResLabels.findIndex(d => d.index === dayBoundaries[0].index);
+                anchorHour = dayBoundaries[0].hour;
+            }
+            // Try different step sizes: every 2nd point (12h for 6h data), every 4th point (24h for 6h data)
+            const stepSizes = [2, 4];
+            let selectedPattern = [];
+            let selectedStep = 2;
+            for (const step of stepSizes) {
+                const pattern = [];
+                // Select every Nth point starting from startIdx
+                for (let i = startIdx; i < lowResLabels.length; i += step) {
+                    pattern.push(lowResLabels[i]);
+                }
+                if (pattern.length < 1)
+                    continue;
                 // Verify spacing
                 let spacingOk = true;
-                if (lowResPattern.length >= 2) {
-                    for (let i = 1; i < lowResPattern.length; i++) {
-                        const spacing = lowResPattern[i].xPos - lowResPattern[i - 1].xPos;
+                if (pattern.length >= 2) {
+                    for (let i = 1; i < pattern.length; i++) {
+                        const spacing = pattern[i].xPos - pattern[i - 1].xPos;
                         if (spacing < minSpacing) {
                             spacingOk = false;
                             break;
                         }
                     }
                 }
-                if (spacingOk && lowResPattern.length > 0) {
-                    lowResPattern.forEach(d => labelsToShow.push(d.index));
-                    // Establish the hour pattern for high-res section
+                if (spacingOk) {
+                    selectedPattern = pattern;
+                    selectedStep = step;
+                    break;
+                }
+            }
+            if (selectedPattern.length > 0) {
+                selectedPattern.forEach(d => labelsToShow.push(d.index));
+                // Establish the hour pattern for high-res section
+                // Step 2 = 12h intervals, step 4 = 24h intervals (assuming 6h low-res data)
+                if (selectedStep === 2) {
                     patternHours = [anchorHour, (anchorHour + 12) % 24];
                 }
                 else {
-                    // Fallback: show only at day boundaries
-                    dayBoundaries.forEach(d => labelsToShow.push(d.index));
-                    patternHours = [dayBoundaries[0].hour];
+                    patternHours = [anchorHour];
                 }
             }
             else {
-                // No clear day boundaries, use every other low-res point
-                for (let i = 0; i < lowResLabels.length; i += 2) {
-                    labelsToShow.push(lowResLabels[i].index);
+                // Fallback: show only at day boundaries or first point
+                if (dayBoundaries.length > 0) {
+                    dayBoundaries.forEach(d => labelsToShow.push(d.index));
+                    patternHours = [dayBoundaries[0].hour];
                 }
-                if (lowResLabels.length > 0) {
+                else {
+                    labelsToShow.push(lowResLabels[0].index);
                     patternHours = [lowResLabels[0].hour];
                 }
             }
         }
-        // High-res section: match the pattern established in low-res
-        if (highResLabels.length > 0 && patternHours.length > 0) {
+        // Fallback: if no pattern established yet (no low-res data), establish from high-res data
+        if (patternHours.length === 0 && highResLabels.length > 0) {
+            // Find labels at or near day boundaries in high-res data
+            const dayBoundaries = highResLabels.filter(d => {
+                const distToMidnight = Math.min(Math.abs(d.hour - 0), Math.abs(d.hour - 24));
+                return distToMidnight <= 1; // Strict boundary check for hourly data
+            });
+            if (dayBoundaries.length > 0) {
+                // Use midnight as anchor
+                const anchorHour = dayBoundaries[0].hour;
+                // Try progressive intervals: 2h, 3h, 4h, 6h, 12h
+                const testIntervals = [2, 3, 4, 6, 12];
+                let foundPattern = false;
+                for (const interval of testIntervals) {
+                    const candidates = highResLabels.filter(d => {
+                        const hourDiff = (d.hour - anchorHour + 24) % 24;
+                        return hourDiff % interval === 0;
+                    });
+                    if (candidates.length < 2)
+                        continue;
+                    // Check spacing
+                    let hasEnoughSpace = true;
+                    for (let i = 1; i < candidates.length; i++) {
+                        const spacing = candidates[i].xPos - candidates[i - 1].xPos;
+                        if (spacing < minSpacing) {
+                            hasEnoughSpace = false;
+                            break;
+                        }
+                    }
+                    if (hasEnoughSpace) {
+                        candidates.forEach(d => labelsToShow.push(d.index));
+                        patternHours = [anchorHour]; // Pattern established
+                        foundPattern = true;
+                        break;
+                    }
+                }
+                if (!foundPattern) {
+                    // Last resort: show only day boundaries
+                    dayBoundaries.forEach(d => labelsToShow.push(d.index));
+                    patternHours = [anchorHour];
+                }
+            }
+            else {
+                // No day boundaries found, use evenly spaced labels
+                const totalLabels = highResLabels.length;
+                let step = 1;
+                // Calculate step to ensure minimum spacing
+                while (step < totalLabels) {
+                    const testIndices = [];
+                    for (let i = 0; i < totalLabels; i += step) {
+                        testIndices.push(i);
+                    }
+                    if (testIndices.length < 2)
+                        break;
+                    let hasEnoughSpace = true;
+                    for (let i = 1; i < testIndices.length; i++) {
+                        const spacing = highResLabels[testIndices[i]].xPos - highResLabels[testIndices[i - 1]].xPos;
+                        if (spacing < minSpacing) {
+                            hasEnoughSpace = false;
+                            break;
+                        }
+                    }
+                    if (hasEnoughSpace) {
+                        testIndices.forEach(i => labelsToShow.push(highResLabels[i].index));
+                        patternHours = [highResLabels[0].hour]; // Use first hour as pattern
+                        break;
+                    }
+                    step++;
+                }
+                // Ultimate fallback: show first and last
+                if (labelsToShow.length === 0) {
+                    labelsToShow.push(highResLabels[0].index);
+                    if (highResLabels.length > 1) {
+                        labelsToShow.push(highResLabels[highResLabels.length - 1].index);
+                    }
+                    patternHours = [highResLabels[0].hour];
+                }
+            }
+        }
+        // High-res section: match the pattern established in low-res (only if pattern came from low-res data)
+        if (highResLabels.length > 0 && patternHours.length > 0 && lowResLabels.length > 0) {
+            // Get x positions of already-selected labels (from low-res section)
+            const existingLabelPositions = labelsToShow.map(idx => labelData[idx].xPos);
             // Try 2-hour intervals that align with the low-res pattern
             const anchorHour = patternHours[0];
             // Test different intervals (2h, 3h, 4h) that maintain alignment
@@ -3212,13 +3312,22 @@ class MeteogramChart {
             let selectedHighRes = [];
             for (const interval of intervals) {
                 // Filter to hours that match: anchorHour + N * interval (mod 24)
-                const candidates = highResLabels.filter(d => {
+                let candidates = highResLabels.filter(d => {
                     const hourDiff = (d.hour - anchorHour + 24) % 24;
                     return hourDiff % interval === 0;
                 });
+                // Filter out candidates too close to existing labels (from low-res section)
+                candidates = candidates.filter(d => {
+                    for (const existingPos of existingLabelPositions) {
+                        if (Math.abs(d.xPos - existingPos) < minSpacing) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
                 if (candidates.length < 2)
                     continue;
-                // Check spacing
+                // Check spacing between candidates themselves
                 let hasEnoughSpace = true;
                 for (let i = 1; i < candidates.length; i++) {
                     const spacing = candidates[i].xPos - candidates[i - 1].xPos;
@@ -3236,10 +3345,29 @@ class MeteogramChart {
                 selectedHighRes.forEach(d => labelsToShow.push(d.index));
             }
             else {
-                // Fallback: show first and last high-res labels
-                labelsToShow.push(highResLabels[0].index);
+                // Fallback: show first high-res label if not too close to existing labels
+                let addedFirst = false;
+                for (const existingPos of existingLabelPositions) {
+                    if (Math.abs(highResLabels[0].xPos - existingPos) < minSpacing) {
+                        addedFirst = true;
+                        break;
+                    }
+                }
+                if (!addedFirst) {
+                    labelsToShow.push(highResLabels[0].index);
+                }
+                // Try to add last high-res label if spacing allows
                 if (highResLabels.length > 1) {
-                    labelsToShow.push(highResLabels[highResLabels.length - 1].index);
+                    let canAddLast = true;
+                    for (const existingPos of existingLabelPositions) {
+                        if (Math.abs(highResLabels[highResLabels.length - 1].xPos - existingPos) < minSpacing) {
+                            canAddLast = false;
+                            break;
+                        }
+                    }
+                    if (canAddLast) {
+                        labelsToShow.push(highResLabels[highResLabels.length - 1].index);
+                    }
                 }
             }
         }
