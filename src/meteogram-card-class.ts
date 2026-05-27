@@ -1,4 +1,5 @@
 import { LitElement, css, html, PropertyValues } from "lit";
+import * as d3 from 'd3';
 import { customElement, property, state } from "lit/decorators.js";
 import {
   MeteogramCardConfig,
@@ -280,7 +281,6 @@ export class MeteogramCard extends LitElement {
   private _windSpeedUnit: "m/s" | "km/h" | "mph" | "kt" = "m/s";
   private _precipUnit: "mm" | "in" = "mm";
 
-  static lastD3RetryTime = 0;
   static meteogramCardVersion: string = version;
 
   // Add a method to fetch icons
@@ -1291,16 +1291,8 @@ export class MeteogramCard extends LitElement {
     if (!this._chartRenderer) {
       this._chartRenderer = new MeteogramChart(this);
     }
-    try {
-      await this._chartRenderer.ensureD3Loaded();
-      this.chartLoaded = true;
-      this._scheduleDrawMeteogram("loadD3AndDraw");
-    } catch (error) {
-      console.error("Error loading D3.js:", error);
-      this.setError(
-        "Failed to load D3.js visualization library. Please refresh the page."
-      );
-    }
+    this.chartLoaded = true;
+    this._scheduleDrawMeteogram("loadD3AndDraw");
   }
 
   async fetchWeatherData(): Promise<ForecastData> {
@@ -1682,32 +1674,6 @@ export class MeteogramCard extends LitElement {
     // Use the _logDomState method to log diagnostic info
     this._logDomState();
 
-    // Add a static property to limit D3 retry frequency
-    const D3_RETRY_INTERVAL = 10000; // 10 seconds
-    if (!MeteogramCard.lastD3RetryTime) {
-      MeteogramCard.lastD3RetryTime = 0;
-    }
-
-    // Always attempt to load D3 if not present
-    if (!window.d3) {
-      try {
-        await this.loadD3AndDraw();
-        return; // loadD3AndDraw will call drawMeteogram when ready
-      } catch (error) {
-        // Only throttle error messages if repeated failures
-        const now = Date.now();
-        if (now - MeteogramCard.lastD3RetryTime < D3_RETRY_INTERVAL) {
-          // Too soon to retry loading D3, skip this attempt
-          return;
-        }
-        MeteogramCard.lastD3RetryTime = now;
-        this.setError(
-          "D3.js library could not be loaded. Please refresh the page."
-        );
-        return;
-      }
-    }
-
     // Clean up any existing chart before proceeding
     this.cleanupChart();
 
@@ -1844,7 +1810,7 @@ export class MeteogramCard extends LitElement {
         this._lastRenderedWidth = availableWidth;
         this._lastRenderedHeight = availableHeight;
 
-        this.svg = window.d3
+        this.svg = d3
           .select(chartDiv)
           .append("svg")
           .attr("width", width)
@@ -2217,7 +2183,6 @@ export class MeteogramCard extends LitElement {
     hourLabelBand: number = 24,
     windAvailable: boolean = false
   ): void {
-    const d3 = window.d3;
     const {
       time,
       temperature,
@@ -2402,15 +2367,15 @@ export class MeteogramCard extends LitElement {
     const yTemp = d3
       .scaleLinear()
       .domain([
-        Math.floor(d3.min(tempValues) - 2),
-        Math.ceil(d3.max(tempValues) + 2),
+        Math.floor(d3.min(tempValues)! - 2),
+        Math.ceil(d3.max(tempValues)! + 2),
       ])
       .range([this._chartHeight, 0]);
 
     // Precipitation Y scale
     const yPrecip = d3
       .scaleLinear()
-      .domain([0, Math.max(2, d3.max([...nonNullRainMax, ...nonNullRain]) + 1)])
+      .domain([0, Math.max(2, (d3.max([...nonNullRainMax, ...nonNullRain]) ?? 0) + 1)])
       .range([this._chartHeight, 0]); // <-- FIXED: range goes from this._chartHeight (bottom) to 0 (top)
 
     // Pressure Y scale - we'll use the right side of the chart
@@ -2421,7 +2386,7 @@ export class MeteogramCard extends LitElement {
       const validPressures = pressure.filter(
         (p): p is number => p !== null && typeof p === "number" && !isNaN(p)
       );
-      const pressureRange = d3.extent(validPressures);
+      const pressureRange = d3.extent(validPressures) as [number, number];
       const pressurePadding = (pressureRange[1] - pressureRange[0]) * 0.1;
       yPressure = d3
         .scaleLinear()

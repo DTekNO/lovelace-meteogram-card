@@ -1,3 +1,4 @@
+import * as d3 from 'd3';
 import { trnslt } from "./translations";
 import { mapHaConditionToMetnoSymbol } from "./weather-entity";
 import { convertWindSpeed } from "./conversions";
@@ -85,26 +86,8 @@ export class MeteogramChart {
      * Ensures D3.js is loaded globally (window.d3). Returns a promise that resolves when D3 is available.
      */
     async ensureD3Loaded(): Promise<void> {
-        if (window.d3) return;
-        // Check if a script is already loading
-        if ((window as any)._meteogramD3LoadingPromise) {
-            await (window as any)._meteogramD3LoadingPromise;
-            return;
-        }
-        // Otherwise, load D3 dynamically
-        (window as any)._meteogramD3LoadingPromise = new Promise<void>((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://d3js.org/d3.v7.min.js';
-            script.async = true;
-            script.onload = () => {
-                resolve();
-            };
-            script.onerror = () => {
-                reject(new Error('Failed to load D3.js library'));
-            };
-            document.head.appendChild(script);
-        });
-        await (window as any)._meteogramD3LoadingPromise;
+        // D3 is bundled — no dynamic loading needed.
+        return;
     }
 
     drawGridOutline(chart: any) {
@@ -443,7 +426,6 @@ export class MeteogramChart {
     }
 
     drawTemperatureLine(chart: any, temperature: (number|null)[], x: any, yTemp: any, legendX?: number, legendY?: number) {
-        const d3 = window.d3;
 
         // Create a gradient that transitions from blue (cold/below freezing) to red (warm/above freezing)
         // Use userSpaceOnUse so we can position gradient stops at exact Y coordinates
@@ -603,7 +585,7 @@ export class MeteogramChart {
 
         this.card._debugLog(`🎨 Gradient stops created (${gradientStops.length} stops):`, gradientStops);
 
-        const line = d3.line()
+        const line = d3.line<number | null>()
             .defined((d: number | null) => d !== null)
             .x((_: number | null, i: number) => x(i))
             .y((_: number | null, i: number) => temperature[i] !== null ? yTemp(temperature[i]) : 0)
@@ -684,13 +666,13 @@ export class MeteogramChart {
         // Always add temperature Y axis (left side)
         chart.append("g")
             .attr("class", "temperature-axis")
-            .call(window.d3.axisLeft(yTemp)
+            .call(d3.axisLeft(yTemp)
                 .tickFormat((d: any) => `${d}`));
 
         // Add temperature Y axis for horizontal grid lines (no numbers)
         chart.append("g")
             .attr("class", "grid")
-            .call(window.d3.axisLeft(yTemp)
+            .call(d3.axisLeft(yTemp)
                 .tickSize(-this.card._chartWidth)
                 .tickFormat(() => ""));
 
@@ -950,7 +932,6 @@ export class MeteogramChart {
         }
     }
     public drawCloudBand(chart: any, cloudCover: (number|null)[], N: number, x: any, legendX?: number, legendY?: number) {
-        const d3 = window.d3;
         // Filter out nulls for cloudCover array
         const cloudFiltered = cloudCover.map(c => c ?? 0);
         const bandTop = this.card._chartHeight * 0.01;
@@ -979,11 +960,10 @@ export class MeteogramChart {
         }
     }
     public drawPressureLine(chart: any, pressure: (number|null)[], x: any, yPressure: any, legendX?: number, legendY?: number) {
-        const d3 = window.d3;
     //
-        const pressureLine = d3.line()
+        const pressureLine = d3.line<number | null>()
             .defined((d: number | null) => d !== null && typeof d === "number" && !isNaN(d))
-            .x((_: number, i: number) => x(i))
+            .x((_: number | null, i: number) => x(i))
             .y((d: number | null) => yPressure(d as number));
 
         chart.append("path")
@@ -1005,7 +985,7 @@ export class MeteogramChart {
             .attr("transform", `translate(${this.card._chartWidth}, 0)`)
             .call(d3.axisRight(yPressure)
                 .tickValues(pressureTicks)
-                .tickFormat(d3.format('d')));
+                .tickFormat(d3.format('d') as any));
 
         // Always draw axis label (if not in focussed mode)
         if (!this.card.focussed && this.card.displayMode !== "core") {
@@ -1043,7 +1023,6 @@ export class MeteogramChart {
         windDirection: (number|null)[],
         windSpeedUnit: string
     ) {
-        const d3 = window.d3;
         const windBandYOffset = margin.top + this.card._chartHeight;
         const windBand = svg.append('g')
             .attr('transform', `translate(${margin.left},${windBandYOffset})`);
@@ -1135,7 +1114,7 @@ export class MeteogramChart {
         const minBarbLen = width < 400 ? 18 : 23;
         const maxBarbLen = width < 400 ? 30 : 38;
         const windLenScale = d3.scaleLinear()
-            .domain([0, Math.max(15, d3.max(windSpeed.filter(v => typeof v === 'number' && !isNaN(v))) || 20)])
+            .domain([0, Math.max(15, (d3.max(windSpeed.filter((v): v is number => typeof v === 'number' && !isNaN(v))) ?? 20))])
             .range([minBarbLen, maxBarbLen]);
         
         // Now place wind barbs 
