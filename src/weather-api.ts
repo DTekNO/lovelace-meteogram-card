@@ -24,6 +24,54 @@ export interface ForecastData {
     };
 }
 
+/**
+ * Escape a value for the error report.
+ *
+ * The report is handed to the card as `.innerHTML`, so anything interpolated into it
+ * is markup until it is escaped. That is not theoretical: a 502 from met.no's CDN
+ * returns a styled HTML error page, and pasting its body in unescaped renders the
+ * page *inside the card*, pushing our own diagnostics off the bottom. Reported by
+ * Jeremy 04.11.2026 after exactly that, on a client whose cache had been cleared so
+ * there was no stale forecast to fall back on.
+ */
+export function escapeHtml(value: unknown): string {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+/**
+ * Reduce a server error body to one readable line.
+ *
+ * Gateways answer with HTML, upstreams with JSON or plain text, and all of it is
+ * noise next to the status code. Keep enough to recognise which hop failed —
+ * "nginx", "cloudflare", a request id — and discard the rest.
+ */
+export function summariseBody(text: string, limit = 160): string {
+    if (!text) return "";
+    const flat = text
+        .replace(/<\s*(script|style)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, " ")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    if (!flat) return "";
+    return flat.length > limit ? `${flat.slice(0, limit - 1).trimEnd()}…` : flat;
+}
+
+/** "41 min ago" / "3 h ago" — the form that answers "is this current?" at a glance. */
+export function agoText(then: number, now: number = Date.now()): string {
+    const mins = Math.round((now - then) / 60000);
+    if (!Number.isFinite(mins)) return "";
+    const back = mins >= 0;
+    const n = Math.abs(mins);
+    if (n < 1) return "just now";
+    if (n < 120) return `${n} min ${back ? "ago" : "from now"}`;
+    return `${Math.round(n / 60)} h ${back ? "ago" : "from now"}`;
+}
+
 export class WeatherAPI {
     static METEOGRAM_CARD_API_CALL_COUNT = 0;
     static METEOGRAM_CARD_API_SUCCESS_COUNT = 0;
@@ -222,17 +270,75 @@ export class WeatherAPI {
         return this._expiresAt;
     }
 
+    /**
+     * Which hop failed, in one line, for someone reading the card rather than a console.
+     *
+     * The status code alone does not tell a user whether to wait, reload or file a bug.
+     * These four do: a 5xx is met.no's problem and self-healing, a 429 is ours and
+     * timed, a 403 is the terms of service, and no response at all is the network in
+     * between.
+     */
+    private _hintFor(status: number | null): string {
+        if (status === null) return "No HTTP response — the request never completed. Network, proxy or content blocker.";
+        if (status === 429) return "met.no is asking for less traffic. The card is backing off and will retry by itself.";
+        if (status === 403) return "met.no refused the request outright — normally the User-Agent or their terms of service.";
+        if (status === 404) return "Endpoint or coordinates rejected. Check latitude and longitude.";
+        if (status >= 500) return "met.no or its CDN failed, not the card. Usually transient; the next refresh should recover.";
+        return "";
+    }
+
+    /**
+     * The error report the card renders.
+     *
+     * Written to be read on a phone, by someone who wants to know whether the card is
+     * broken or the weather service is. So: what failed, what it means, and how stale
+     * what is on screen now has become — because when the fallback is showing an old
+     * forecast, "how old" is the only question that matters.
+     *
+     * Everything interpolated is escaped. See escapeHtml.
+     */
     getDiagnosticText(): string {
-        let diag = `<br><b>Weather API Error</b><br>`;
-        if (this.lastError instanceof Error) {
-            diag += `Error: <code>${this.lastError.message}</code><br>`;
-        } else if (this.lastError !== undefined && this.lastError !== null) {
-            diag += `Error: <code>${String(this.lastError)}</code><br>`;
+        const status = this.lastStatusCode;
+        const lines: string[] = [`<b>Weather API error</b>`];
+
+        lines.push(`Status: <code>${escapeHtml(status ?? "no response")}</code>`);
+
+        const raw = this.lastError instanceof Error ? this.lastError.message
+            : this.lastError != null ? String(this.lastError) : "";
+        const msg = summariseBody(raw, 300);
+        if (msg) lines.push(`Message: <code>${escapeHtml(msg)}</code>`);
+
+        const hint = this._hintFor(status);
+        if (hint) lines.push(hint);
+
+        const stamp = this._forecastData?.fetchTimestamp;
+        if (stamp) {
+            const t = new Date(stamp).getTime();
+            lines.push(Number.isFinite(t)
+                ? `Last good forecast: <code>${escapeHtml(new Date(t).toLocaleString())}</code> (${escapeHtml(agoText(t))})`
+                : `Last good forecast: <code>${escapeHtml(stamp)}</code>`);
+        } else {
+            lines.push(`Last good forecast: <code>none held</code> — nothing to fall back on, which is why the chart is blank.`);
         }
-        diag += `Status: <code>${this.lastStatusCode ?? ""}</code><br>`;
-        diag += `Card version: <code>${version || "unknown"}</code><br>`;
-        diag += `Client type: <code>${navigator.userAgent}</code><br>`;
-        return diag;
+
+        if (this._expiresAt) {
+            const expired = Date.now() > this._expiresAt;
+            const when = escapeHtml(new Date(this._expiresAt).toLocaleTimeString());
+            lines.push(expired
+                ? `Held forecast expired at <code>${when}</code> (${escapeHtml(agoText(this._expiresAt))}) and is being shown anyway.`
+                : `Held forecast valid until <code>${when}</code>.`);
+        }
+
+        if (this._throttledUntil && Date.now() < this._throttledUntil) {
+            lines.push(`Backing off until <code>${escapeHtml(new Date(this._throttledUntil).toLocaleTimeString())}</code>.`);
+        }
+
+        lines.push(`API calls this session: <code>${WeatherAPI.METEOGRAM_CARD_API_CALL_COUNT}</code>, `
+            + `succeeded: <code>${WeatherAPI.METEOGRAM_CARD_API_SUCCESS_COUNT}</code>`);
+        lines.push(`Card version: <code>${escapeHtml(version || "unknown")}</code>`);
+        lines.push(`Client: <code>${escapeHtml(navigator.userAgent)}</code>`);
+
+        return `<br>${lines.join("<br>")}<br>`;
     }
 
     getDiagnosticInfo(): any {
@@ -584,8 +690,11 @@ export class WeatherAPI {
             }
 
             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Weather API returned ${response.status}: ${response.statusText}\n${errorText}`);
+                // Summarised, never pasted. The body is markup often enough that
+                // carrying it verbatim into an innerHTML report hides the report.
+                const body = summariseBody(await response.text());
+                const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+                throw new Error(`met.no returned ${status}${body ? ` — ${body}` : ""}`);
             }
 
             const jsonData = await response.json();
@@ -598,10 +707,13 @@ export class WeatherAPI {
             this.lastError = error;
             // Reset throttling on fetch failure to allow retry sooner
             this._lastFetchTime = null;
+            // The message is already the first thing getDiagnosticText reports, so it is
+            // not repeated here. It used to appear twice, once raw and once inside the
+            // diagnostics, which is how a 502's HTML body got into the card twice over.
             const diag = this.getDiagnosticText() +
-                `API URL: <code>${urlToUse}</code><br>` +
-                `Origin header: <code>${headers['Origin']}</code><br>`;
-            throw new Error(`<br>Failed to get weather data: ${(error as Error).message}\n<br>Check your network connection, browser console, and API accessibility.\n\n${diag}`);
+                `API URL: <code>${escapeHtml(urlToUse)}</code><br>` +
+                `Origin header: <code>${escapeHtml(headers['Origin'])}</code><br>`;
+            throw new Error(diag, { cause: error });
         }
     }
 

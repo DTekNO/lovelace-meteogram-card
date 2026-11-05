@@ -2590,11 +2590,9 @@ export class MeteogramCard extends LitElement {
         // No cached data available - fail normally
         this.setError(diag);
         this.logErrorContext("fetchWeatherData", error);
-        throw new Error(
-          `<br>Failed to get weather data: ${
-            (error as Error).message
-          }\n<br>Check your network connection, browser console, and API accessibility.\n\n${diag}`
-        );
+        // `diag` already opens with the status and the message, so repeating them here
+        // only gave the failure two chances to be unreadable.
+        throw new Error(diag, { cause: error });
       } finally {
         // Do NOT clear weatherDataPromise here, so repeated calls use the same promise
         // Only clear it after chart draw is complete
