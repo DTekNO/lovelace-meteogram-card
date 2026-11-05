@@ -1,4 +1,5 @@
-import { LitElement, css, html, PropertyValues } from "lit";
+import { LitElement, css, html, svg, PropertyValues } from "lit";
+import { attributionStatus, retryDelayMs } from "./api-status";
 import * as d3 from 'd3';
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -231,6 +232,9 @@ export class MeteogramCard extends LitElement {
   private _chartRenderInProgress = false;
   private _pendingRender = false;
   private _lastApiSuccess = false;
+  // Consecutive failed fetches, 0 while healthy. Drives both the retry cadence and the
+  // attribution icon, so the two can never disagree about whether the card is working.
+  private _apiFailures = 0;
   private _margin = { top: 32, right: 48, bottom: 32, left: 48 };
   private _chartWidth = 0;
   private _chartHeight = 0;
@@ -2520,6 +2524,7 @@ export class MeteogramCard extends LitElement {
         this.apiExpiresAt = weatherApi.expiresAt;
         this._statusApiSuccess = true;
         this._lastApiSuccess = true;
+        this._apiFailures = 0;
         // Store units from API
         this._currentUnits = result && result.units ? result.units : {};
         // Filter result by meteogramHours
@@ -2574,6 +2579,13 @@ export class MeteogramCard extends LitElement {
           weatherApiExpiresAt: weatherApi.expiresAt,
         });
         this._statusApiSuccess = false;
+        // Cleared here as well as counted. `_lastApiSuccess` was set true on the first
+        // success and never reset, and it is tested *before* `_statusApiSuccess` when
+        // colouring the attribution icon — so a card that had ever worked stayed green
+        // through every subsequent failure, which is the opposite of what the icon is
+        // for.
+        this._lastApiSuccess = false;
+        this._apiFailures += 1;
         const diag = weatherApi.getDiagnosticText();
         this._debugLog(`[${CARD_NAME}] WeatherAPI diagnostic:`, diag);
         
@@ -3262,8 +3274,26 @@ export class MeteogramCard extends LitElement {
         this._setupVisibilityObserver();
         this._setupMutationObserver();
 
+        // --- RETRY AFTER A FAILED FETCH ---
+        // Armed here rather than in the `.catch` below, because a failure that still
+        // has cached data to draw resolves instead of throwing — the chart is fine, only
+        // the data is stale, and the catch never sees it. Without this the card never
+        // asks again. See API_RETRY_BACKOFF_MS.
+        if (this._apiFailures > 0) {
+          const delay = retryDelayMs(this._apiFailures);
+          if (this._weatherRefreshTimeout)
+            clearTimeout(this._weatherRefreshTimeout);
+          this._debugLog(
+            `[${CARD_NAME}] API failed ${this._apiFailures}x; retrying in ${Math.round(
+              delay / 60000
+            )} min`
+          );
+          this._weatherRefreshTimeout = window.setTimeout(() => {
+            this._scheduleDrawMeteogram("retry-after-api-failure", true);
+          }, delay);
+        }
         // --- SCHEDULE REFRESH 60s AFTER expiresAt ---
-        if (this.apiExpiresAt) {
+        else if (this.apiExpiresAt) {
           const now = Date.now();
           // Floored, not clamped to zero: see MIN_REFRESH_DELAY_MS. A forecast that
           // has already expired must still wait before the next attempt, or the
@@ -3323,21 +3353,32 @@ export class MeteogramCard extends LitElement {
               containsApiError: this.meteogramError?.includes("API Error"),
             }
           );
-          // If a diagnostic error is already present, append the retry message
+          // A failed *fetch* backs off; anything else here is a local draw fault, where
+          // a minute is right and met.no is not involved. Retrying a met.no outage every
+          // sixty seconds is the ban risk the fetch guards exist to prevent, and this
+          // path reaches it whenever there is no cached forecast to fall back on — the
+          // blank-card case, which is also the one a user is most likely to leave open
+          // and staring at them.
+          const retryMs =
+            this._apiFailures > 0 ? retryDelayMs(this._apiFailures) : 60000;
+          const retryText =
+            retryMs >= 60000 * 2
+              ? `retrying in ${Math.round(retryMs / 60000)} minutes`
+              : "retrying in 60 seconds";
           if (
             this.meteogramError &&
             this.meteogramError.includes("API Error")
           ) {
-            this.meteogramError += `<br><span style='color:#b71c1c;'>Weather data not available, retrying in 60 seconds</span>`;
+            this.meteogramError += `<br><span style='color:#b71c1c;'>Weather data not available, ${retryText}</span>`;
           } else {
-            this.setError("Weather data not available, retrying in 60 seconds");
+            this.setError(`Weather data not available, ${retryText}`);
           }
           if (this._weatherRetryTimeout)
             clearTimeout(this._weatherRetryTimeout);
           this._weatherRetryTimeout = window.setTimeout(() => {
             this.meteogramError = "";
             this._drawMeteogram("retry-after-error");
-          }, 60000);
+          }, retryMs);
         }
       })
       .finally(() => {
@@ -4256,17 +4297,42 @@ export class MeteogramCard extends LitElement {
     const showAttribution =
       (this.entityId && this.entityId !== "none" && this.entityAttribution) ||
       !(this.entityId && this.entityId !== "none");
-    // Attribution icon color logic
-    let attributionColor = "#1976d2"; // default blue
-    let statusSymbol = "ℹ️";
-    if (this._lastApiSuccess) {
-      attributionColor = "#388e3c"; // green
-    } else if (this._statusApiSuccess === null) {
-      attributionColor = "#fbc02d"; // orange
-    } else if (this._statusApiSuccess === false) {
-      attributionColor = "#b71c1c"; // red
-      statusSymbol = "⚠️"; // Alert icon when there's an error
-    }
+    // Whether anything is on screen behind the error — an outage with a cached forecast
+    // still drawing is a different situation from an outage with a blank card, and the
+    // icon should not call both the same thing.
+    const hasDrawableData = !!(
+      this._weatherApiInstance &&
+      (this._weatherApiInstance as any)._forecastData
+    );
+    // See api-status.ts for why the order and the two outage kinds matter.
+    const apiStatus = attributionStatus(
+      this._statusApiSuccess,
+      this._apiFailures,
+      hasDrawableData
+    );
+    const attributionColor = apiStatus.color;
+    const attributionState = apiStatus.message;
+
+    // The glyphs used to be ℹ️ and ⚠️, and that is why the colour never appeared on
+    // screen: those are emoji presentation sequences, drawn by the platform's own colour
+    // font, and `color:` does not reach them. Two iPad screenshots of this card, one
+    // healthy and one mid-outage, show an identical blue icon. These inherit
+    // `currentColor`, so the state is visible — and the shape changes too, because
+    // colour alone is not a signal everyone can read.
+    const statusSymbol =
+      apiStatus.kind === "down"
+        ? svg`<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
+                focusable="false" style="vertical-align:middle">
+              <path d="M12 2.6 23 21.4H1Z" fill="currentColor"/>
+              <rect x="11" y="9" width="2" height="6" rx="1" fill="#fff"/>
+              <circle cx="12" cy="18" r="1.2" fill="#fff"/>
+            </svg>`
+        : svg`<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
+                focusable="false" style="vertical-align:middle">
+              <circle cx="12" cy="12" r="10" fill="currentColor"/>
+              <rect x="11" y="10.5" width="2" height="7" rx="1" fill="#fff"/>
+              <circle cx="12" cy="7" r="1.3" fill="#fff"/>
+            </svg>`;
     // Attribution tooltip content
     let attributionTooltip = "";
     if (this.entityId && this.entityId !== "none" && this.entityAttribution) {
@@ -4412,7 +4478,8 @@ export class MeteogramCard extends LitElement {
                         this._onAttributionIconClick(e);
                       }
                     }}
-                    aria-label="Show attribution"
+                    aria-label="${attributionState}. Show attribution"
+                    title="${attributionState}"
                     aria-expanded="${this.attributionTooltipOpen}"
                   >
                     <span style="font-size:1.3em;vertical-align:middle;"
