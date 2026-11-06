@@ -115,7 +115,7 @@ Below are the main configuration options for the Meteogram Card:
 | title               | string   | "Weather Forecast" | Optional title for the card                                                                       |
 | latitude            | number   | HA's default    | Latitude for weather data                                                                         |
 | longitude           | number   | HA's default    | Longitude for weather data                                                                        |
-| altitude            | number   | HA's default    | Altitude (in meters) for weather data. Optional; improves accuracy for some locations.            |
+| altitude            | number   | HA's default    | Altitude in metres. **Recommended** — met.no uses it to place the forecast vertically.             |
 | entity_id           | string   | none            | Weather entity to use as data source                                                              |
 | show_cloud_cover    | boolean  | true            | Show/hide cloud cover visualization                                                               |
 | show_pressure       | boolean  | true            | Show/hide pressure curve                                                                          |
@@ -143,7 +143,7 @@ Below are the main configuration options for the Meteogram Card:
 - `aspect_ratio` only applies in `panel` or `grid` layout modes.
 - `diagnostics` enables a status panel for troubleshooting API/data issues.
 - `display_mode` is the preferred way to set the card's display style. Use `"focussed"` for a minimal chart-only view.
-- `altitude` is optional and can be set to improve forecast accuracy for locations at significant elevation. If you have not set `latitude`/`longitude` either, the card uses your Home Assistant home location *and* its elevation. Set it yourself whenever you point the card at explicit coordinates: met.no recommends supplying an altitude, and without one it resolves the point against a coarse global elevation model.
+- `altitude` is **recommended**, not merely optional. met.no's own guidance is that supplying it materially improves the forecast: without one they resolve the point against a coarse global elevation model, and in anything but flat country that is enough to shift the whole temperature curve. If you have set neither `latitude` nor `longitude`, the card already uses your Home Assistant home location *and* its elevation, so there is nothing to do. Set it yourself whenever you point the card at explicit coordinates — that is the case where the card has no elevation to inherit.
 
 ### Option Notes
 - `show_precipitation` replaces the deprecated `show_rain` option. For backward compatibility, `show_rain` is still supported but will be ignored if `show_precipitation` is set.
@@ -155,7 +155,7 @@ Below are the main configuration options for the Meteogram Card:
 - `aspect_ratio` only applies in `panel` or `grid` layout modes.
 - `diagnostics` enables a status panel for troubleshooting API/data issues.
 - `display_mode` is the preferred way to set the card's display style. Use `"focussed"` for a minimal chart-only view.
-- `altitude` is optional and can be set to improve forecast accuracy for locations at significant elevation. If you have not set `latitude`/`longitude` either, the card uses your Home Assistant home location *and* its elevation. Set it yourself whenever you point the card at explicit coordinates: met.no recommends supplying an altitude, and without one it resolves the point against a coarse global elevation model.
+- `altitude` is **recommended**, not merely optional. met.no's own guidance is that supplying it materially improves the forecast: without one they resolve the point against a coarse global elevation model, and in anything but flat country that is enough to shift the whole temperature curve. If you have set neither `latitude` nor `longitude`, the card already uses your Home Assistant home location *and* its elevation, so there is nothing to do. Set it yourself whenever you point the card at explicit coordinates — that is the case where the card has no elevation to inherit.
 
 ### Layout Mode (`layout_mode`)
 

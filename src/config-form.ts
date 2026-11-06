@@ -62,7 +62,17 @@ const HELPERS: Record<string, () => string> = {
     latitude: () => t("coordinates_helper",
         "Used for sunrise and sunset, and for the forecast when no weather entity is set. "
         + "Defaults to Home Assistant's location."),
-    altitude: () => t("optional", "Optional"),
+    // Not "Optional", which is what this said and is what the schema already implies.
+    // met.no's own people are explicit that supplying it matters: without one they
+    // resolve the point against a coarse global elevation model, and in anything but
+    // flat country that is enough to shift the whole temperature curve. A separate key
+    // from `optional` so the twelve translated files fall back to this English text
+    // rather than keeping their correct translation of the wrong word.
+    altitude: () => t("altitude_helper",
+        "Recommended — met.no places the forecast vertically using this, and without one "
+        + "falls back to a coarse global elevation model. Taken from Home Assistant's "
+        + "location when you leave the coordinates above empty; set it yourself whenever "
+        + "you fill them in, because then there is no elevation to inherit."),
     meteogram_hours: () => t("choose_hours",
         "How much forecast to show. Pick a value or type your own, such as 96h."),
     aspect_ratio: () => t("aspect_ratio_helper", "Pick a ratio or type your own, such as 1.6 or 5:3."),
@@ -177,7 +187,23 @@ export function meteogramConfigForm() {
                 // clicking them changing nothing because the value went into a nested
                 // object, and a stray "layers:" appearing in the YAML.
                 flatten: true,
-                schema: [
+                schema: [{
+                    // A grid rather than a flat list, purely for the vertical space.
+                    //
+                    // ha-form puts `margin-bottom: 24px` on every row but the last, from
+                    // its own shadow root and with no custom property behind it, so that
+                    // gap cannot be reached from here at all. ha-form-grid is the one
+                    // part of the layout that *is* driven by custom properties, which do
+                    // inherit through shadow DOM — so the lever available is fewer rows,
+                    // not a smaller gap. Eight toggles become four rows of two.
+                    //
+                    // Column count is left at `auto-fit` over a 200px minimum, so the
+                    // editor drops back to a single column when the panel is too narrow
+                    // for two rather than squeezing the labels. See the editor's styles
+                    // for the one override.
+                    type: "grid",
+                    name: "",
+                    schema: [
                     { name: "show_cloud_cover", selector: { boolean: {} } },
                     { name: "show_pressure", selector: { boolean: {} } },
                     { name: "show_precipitation", selector: { boolean: {} } },
@@ -186,7 +212,8 @@ export function meteogramConfigForm() {
                     { name: "show_wind", selector: { boolean: {} } },
                     { name: "show_sun", selector: { boolean: {} } },
                     { name: "animate", selector: { boolean: {} } },
-                ],
+                    ],
+                }],
             },
             {
                 type: "expandable",
