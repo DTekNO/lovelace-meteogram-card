@@ -134,20 +134,12 @@ Below are the main configuration options for the Meteogram Card:
 | styles              | object   | {{}}             | Custom CSS variables for card styling (see below)                                                 |
 
 ### Option Notes
-**Breaking change:** `show_precipitation` is now the only supported option for precipitation display. The legacy `show_rain` option has been removed and is no longer supported. Update your configuration to use `show_precipitation` only.
-- `meteogram_hours` replaces the deprecated `meteogram_length` option. For backward compatibility, `meteogram_length` is still supported but will be ignored if `meteogram_hours` is set.
-- `layout_mode` controls the card's layout. Possible values:
-  - `sections` (default): Standard Home Assistant card layout.
-  - `panel`: Wide, single-panel layout (good for dashboards).
-  - `grid`: Grid layout for advanced dashboarding.
-- `aspect_ratio` only applies in `panel` or `grid` layout modes.
-- `diagnostics` enables a status panel for troubleshooting API/data issues.
-- `display_mode` is the preferred way to set the card's display style. Use `"focussed"` for a minimal chart-only view.
-- `altitude` is **recommended**, not merely optional. met.no's own guidance is that supplying it materially improves the forecast: without one they resolve the point against a coarse global elevation model, and in anything but flat country that is enough to shift the whole temperature curve. By default the card takes the altitude from your Home Assistant location, along with the coordinates, so there is nothing to do. Set `altitude` yourself whenever you configure a custom `latitude`/`longitude`.
 
-### Option Notes
-- `show_precipitation` replaces the deprecated `show_rain` option. For backward compatibility, `show_rain` is still supported but will be ignored if `show_precipitation` is set.
-- `meteogram_hours` replaces the deprecated `meteogram_length` option. For backward compatibility, `meteogram_length` is still supported but will be ignored if `meteogram_hours` is set.
+- `show_precipitation` replaces the older `show_rain`. `show_rain` is no longer read: a
+  configuration still carrying it is accepted without complaint and simply has no effect,
+  so change it to `show_precipitation`.
+- `meteogram_hours` replaces the older `meteogram_length`, on the same terms —
+  `meteogram_length` is no longer read, and a card carrying it falls back to the 48h default.
 - `layout_mode` controls the card's layout. Possible values:
   - `sections` (default): Standard Home Assistant card layout.
   - `panel`: Wide, single-panel layout (good for dashboards).

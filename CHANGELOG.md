@@ -5,12 +5,36 @@ All notable changes to the Meteogram Card will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2026.11.0] - 2026.11.06
+
+### Changed
+
+- **The card asks met.no for less.** Two of their requirements were not being met. Repeated
+  requests now carry `If-Modified-Since`, so an unchanged forecast comes back as a bodyless
+  `304` instead of a fresh download; the card already read the `Last-Modified` it needs for
+  this and was discarding it. And the two timers that decide when to ask no longer fire on
+  constants — met.no's edge hands every client in a coordinate cell the same absolute
+  expiry, so a fixed offset made every device sharing a cell fire in the same instant and
+  stay locked there. The refresh is now spread over a minute to five minutes past expiry,
+  never earlier, and the retry after a failure is spread either side of its nominal delay.
+- **Altitude is described as recommended rather than optional.** met.no place the forecast
+  vertically using it, and without one fall back to a coarse global elevation model, which
+  in anything but flat country is enough to shift the whole temperature curve. The editor
+  now says so, says that the altitude comes from your Home Assistant location by default,
+  and says to set it when you configure a custom location — which is the case where there
+  is no elevation to inherit.
 
 ### Added
 - **The redraw log says which card element wrote each line, and the panel counts draws made on the page by what triggered them.** The log is shared by every card on the page and survives any of them being replaced, which is deliberate — a rebuild would otherwise erase the history of what came before it — but it meant a run of identical lines could not be attributed. Each line now carries the element's number, so one card redrawing repeatedly is distinguishable from several cards each redrawing once, and the numbers climbing shows how often Home Assistant is replacing the card. The panel also reports a running count of draws per trigger since the page loaded — for the page rather than the one card, matching the list beneath it, which is what the label says. Twenty log entries cover very little of a wall panel's day and the unusual ones are the first to be evicted; a count cannot be evicted, and answers what is redrawing a card without anyone having to catch it in the act.
 
 ### Fixed
+- **Coordinates are truncated where the met.no URL is built.** The four-decimal limit their
+  terms set — 5 or more returns a 403 on newer products, and full precision also defeats
+  their edge cache by giving every installation a unique URL — was written out at five
+  separate places, while the one piece of code that actually composes the URL trusted
+  whatever it was handed. It is enforced at that point now, and the three places that built
+  the request object have become one.
+
 - **The card recovers on its own after a weather service outage.** It did not. The periodic refresh is armed only once a forecast has been fetched successfully, and a failure that still has cached data to draw completes normally rather than raising — so the retry that handles a raised error never ran either. A card first opened while met.no was down therefore armed nothing at all: it drew the cached forecast once and sat there, never asking again and never redrawing, so the chart stopped advancing as the hours passed and stayed that way after the service came back. The same gap had an opposite mode, where a card that *had* fetched successfully went back to met.no every sixty seconds for the length of the outage — the polling the forecast cache exists to prevent, and a ban would land on every user of the card at once. A failed fetch now schedules its own retry, waiting five minutes, then ten, twenty, forty, and an hour thereafter: a brief outage costs one request and clears in five minutes, a long one costs one request an hour, and either way the chart redraws when the forecast returns.
 
 - **The information icon shows whether the card is actually working.** Two things stopped it. The icon was coloured from a flag set by the first successful fetch and never cleared, and that flag was tested first — so a card that had ever worked stayed green through every later failure. And the glyphs were emoji, drawn by the platform's own colour font, which ignores the colour the card sets: side-by-side screenshots of a healthy card and a broken one were indistinguishable. The icon is now drawn as a shape that takes the colour, and reports four states — blue before anything has been tried, green when the forecast is current, amber when the service is unreachable but a cached forecast is still on screen, and red when there is nothing to show. Amber and red differ in shape as well as colour, and the icon's tooltip gives the state in words along with when the next attempt is due.
