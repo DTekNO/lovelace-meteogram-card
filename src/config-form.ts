@@ -186,23 +186,7 @@ export function meteogramConfigForm() {
                 // clicking them changing nothing because the value went into a nested
                 // object, and a stray "layers:" appearing in the YAML.
                 flatten: true,
-                schema: [{
-                    // A grid rather than a flat list, purely for the vertical space.
-                    //
-                    // ha-form puts `margin-bottom: 24px` on every row but the last, from
-                    // its own shadow root and with no custom property behind it, so that
-                    // gap cannot be reached from here at all. ha-form-grid is the one
-                    // part of the layout that *is* driven by custom properties, which do
-                    // inherit through shadow DOM — so the lever available is fewer rows,
-                    // not a smaller gap. Eight toggles become four rows of two.
-                    //
-                    // Column count is left at `auto-fit` over a 200px minimum, so the
-                    // editor drops back to a single column when the panel is too narrow
-                    // for two rather than squeezing the labels. See the editor's styles
-                    // for the one override.
-                    type: "grid",
-                    name: "",
-                    schema: [
+                schema: [
                     { name: "show_cloud_cover", selector: { boolean: {} } },
                     { name: "show_pressure", selector: { boolean: {} } },
                     { name: "show_precipitation", selector: { boolean: {} } },
@@ -211,8 +195,7 @@ export function meteogramConfigForm() {
                     { name: "show_wind", selector: { boolean: {} } },
                     { name: "show_sun", selector: { boolean: {} } },
                     { name: "animate", selector: { boolean: {} } },
-                    ],
-                }],
+                ],
             },
             {
                 type: "expandable",

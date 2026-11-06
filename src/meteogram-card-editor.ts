@@ -106,20 +106,5 @@ export class MeteogramCardEditor extends LitElement {
             padding: 16px;
             color: var(--primary-text-color);
         }
-        /*
-         * The display toggles are laid out as a grid so they stop consuming a screen of
-         * vertical space one per row — see the note in config-form.ts. ha-form-grid
-         * reads both of these as custom properties, and custom properties inherit
-         * through shadow DOM, which is the only way into that element's layout from
-         * out here; its row gap and ha-form's own 24px row margin are both fixed.
-         *
-         * 190px rather than the 200px default because a toggle row is label plus a
-         * switch, narrower than the number boxes the default was chosen for, and 190
-         * is what fits two columns in the config panel at its usual width. Below that
-         * auto-fit drops to one column on its own rather than squeezing the labels.
-         */
-        ha-form {
-            --form-grid-min-width: 190px;
-        }
     `;
 }
