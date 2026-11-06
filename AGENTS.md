@@ -1,4 +1,13 @@
-# Development Context for Claude AI
+# Agent instructions — Meteogram Card
+
+The single instruction file for any coding agent working in this repo, tool-neutral by
+name because it is not written for one of them. `CLAUDE.md` at the root points here;
+`.github/copilot-instructions.md` was a second, overlapping copy of much of this and has
+been folded in and removed.
+
+**Read *Rules for talking to met.no* before changing anything in the fetch path.** Those
+rules are not style preferences and the cost of breaking one is paid by every user of the
+card at once.
 
 This document provides technical context about the Meteogram Card codebase for AI-assisted development. It captures key architectural decisions, implementation patterns, and debugging insights.
 
@@ -395,6 +404,60 @@ try {
 }
 ```
 
+### 4. Gradient coordinate space
+❌ `gradientUnits="objectBoundingBox"` centres the gradient on the bounding box, not on
+the temperature scale, so 0 °C lands in the wrong place.
+
+✅ Use `gradientUnits="userSpaceOnUse"` with Y coordinates taken from `yTemp`.
+
+### 5. Subscriptions left running
+❌ Leaving a forecast subscription active while the card is hidden burns CPU and battery
+for a chart nobody is looking at.
+
+✅ Pause on `document.visibilitychange`, resume with a freshness check.
+
+### 6. Curve type
+❌ `d3.curveLinear` gives a visibly kinked temperature line.
+
+✅ `d3.curveMonotoneX` — smooth, and monotone so it cannot overshoot between points.
+
+## Code Style
+
+**Strict null handling.** Temperature arrays carry real `null`s for missing hours, and
+`|| 0` turns a gap into a reading of zero degrees:
+
+```typescript
+const temp = temperature[i];
+return temp !== null ? yTemp(temp) : 0;   // not: yTemp(temperature[i] || 0)
+```
+
+**Validate before reaching in.** Anything out of `localStorage` is untrusted:
+
+```typescript
+if (!cache?.data?.time?.length || !cache.data.temperature?.length) {
+  throw new Error('Invalid cache structure');
+}
+```
+
+**Naming.** Private members are prefixed with `_`; public ones are not.
+
+**D3.** `const d3 = window.d3` — loaded globally. Remember SVG's Y axis runs downward, so
+a higher temperature is a *lower* Y: `yTemp.range()` is `[chartHeight, 0]`.
+
+**Log prefixes**, so a filtered console still reads: 🎨 rendering, ✅ success,
+⚠️ warning, ❌ error, 🔄 cache, 📡 API or subscription.
+
+## When writing new code
+
+1. Validate data structures before reaching into them.
+2. Handle `null` explicitly in weather data — a missing hour is not zero.
+3. Use the types in `types.ts`; avoid `any`.
+4. Include debug logging with the prefixes above.
+5. Test gradients across all three cases: wholly above 0 °C, wholly below, and spanning it.
+6. Check custom CSS variables before applying defaults.
+7. Clean up in `disconnectedCallback` — timers especially, or a replaced card keeps fetching.
+8. Obey *Rules for talking to met.no* for anything touching the fetch path.
+
 ## Development Workflow
 
 ### Build Commands
@@ -452,6 +515,10 @@ Fresh forecast data retrieved from service
 - `src/meteogram-card-styles.ts` - CSS variables and styling
 - `src/types.ts` - TypeScript interfaces
 - `src/meteogram-card-editor.ts` - Visual editor with beta-only diagnostics
+- `src/config-form.ts` - Editor schema, field labels and helper text
+- `src/api-status.ts` - Retry backoff, refresh spread and the attribution icon's state
+- `src/conversions.ts` - Unit conversions (temperature, wind, pressure)
+- `src/translations.ts` - Localisation lookup and fallback
 
 ## Browser Compatibility
 
@@ -504,4 +571,4 @@ Fresh forecast data retrieved from service
 
 ---
 
-*This document should be updated as architecture patterns evolve. Last updated: November 2025 (v3.2.0)*
+*Update this as the architecture changes. Last updated: November 2026, during 2026.11.0.*

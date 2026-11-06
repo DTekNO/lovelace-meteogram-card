@@ -27,7 +27,7 @@ met.no's terms cap **the whole card** — every installation together, not each 
 20 requests per second. At roughly 59k downloads the normal steady state already sits
 within a factor of two of that ceiling. A mistake here is not one user's problem; it
 gets the card banned for everyone at once. The full reasoning, and what each rule is
-protecting against, is in [`doc/CLAUDE.md`](../doc/CLAUDE.md) under
+protecting against, is in [`AGENTS.md`](../AGENTS.md) under
 *Rules for talking to met.no*.
 
 - [ ] **Nothing requests before `Expires`.** The cache gate still comes first, and any
