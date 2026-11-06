@@ -30,7 +30,7 @@
   "ui.editor.meteogram.longitude": "Longitude",
   "ui.editor.meteogram.altitude": "Altitude",
   "ui.editor.meteogram.optional": "Optional",
-  "ui.editor.meteogram.altitude_helper": "Recommended — met.no places the forecast vertically using this, and without one falls back to a coarse global elevation model. Taken from Home Assistant's location when you leave the coordinates above empty; set it yourself whenever you fill them in, because then there is no elevation to inherit.",
+  "ui.editor.meteogram.altitude_helper": "Recommended — met.no uses it to place the forecast vertically, and without one falls back to a coarse global elevation model. Taken from your Home Assistant location by default. Set it here when you configure a custom location above.",
   "ui.editor.meteogram.default": "Default",
   "ui.editor.meteogram.leave_empty": "Leave empty to use Home Assistant's configured location",
   "ui.editor.meteogram.display_options": "Display Options",

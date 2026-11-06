@@ -30,7 +30,7 @@
   "ui.editor.meteogram.longitude": "Lengdegrad",
   "ui.editor.meteogram.altitude": "Høyde over havet",
   "ui.editor.meteogram.optional": "Valgfritt",
-  "ui.editor.meteogram.altitude_helper": "Anbefales — met.no plasserer varselet i høyden ut fra denne, og uten den brukes en grov global høydemodell. Hentes fra posisjonen i Home Assistant når du lar koordinatene over stå tomme; sett den selv når du fyller dem inn, for da finnes det ingen høyde å arve.",
+  "ui.editor.meteogram.altitude_helper": "Anbefales — met.no bruker den til å plassere varselet i høyden, og uten den brukes en grov global høydemodell. Hentes fra posisjonen i Home Assistant som standard. Sett den her når du angir en egen posisjon over.",
   "ui.editor.meteogram.default": "Standard",
   "ui.editor.meteogram.leave_empty": "La stå tomt for å bruke Home Assistants konfigurerte lokasjon",
   "ui.editor.meteogram.display_options": "Visningsvalg",

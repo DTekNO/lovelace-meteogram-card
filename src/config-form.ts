@@ -69,10 +69,9 @@ const HELPERS: Record<string, () => string> = {
     // from `optional` so the twelve translated files fall back to this English text
     // rather than keeping their correct translation of the wrong word.
     altitude: () => t("altitude_helper",
-        "Recommended — met.no places the forecast vertically using this, and without one "
-        + "falls back to a coarse global elevation model. Taken from Home Assistant's "
-        + "location when you leave the coordinates above empty; set it yourself whenever "
-        + "you fill them in, because then there is no elevation to inherit."),
+        "Recommended — met.no uses it to place the forecast vertically, and without one "
+        + "falls back to a coarse global elevation model. Taken from your Home Assistant "
+        + "location by default. Set it here when you configure a custom location above."),
     meteogram_hours: () => t("choose_hours",
         "How much forecast to show. Pick a value or type your own, such as 96h."),
     aspect_ratio: () => t("aspect_ratio_helper", "Pick a ratio or type your own, such as 1.6 or 5:3."),

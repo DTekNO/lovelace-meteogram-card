@@ -143,7 +143,7 @@ Below are the main configuration options for the Meteogram Card:
 - `aspect_ratio` only applies in `panel` or `grid` layout modes.
 - `diagnostics` enables a status panel for troubleshooting API/data issues.
 - `display_mode` is the preferred way to set the card's display style. Use `"focussed"` for a minimal chart-only view.
-- `altitude` is **recommended**, not merely optional. met.no's own guidance is that supplying it materially improves the forecast: without one they resolve the point against a coarse global elevation model, and in anything but flat country that is enough to shift the whole temperature curve. If you have set neither `latitude` nor `longitude`, the card already uses your Home Assistant home location *and* its elevation, so there is nothing to do. Set it yourself whenever you point the card at explicit coordinates — that is the case where the card has no elevation to inherit.
+- `altitude` is **recommended**, not merely optional. met.no's own guidance is that supplying it materially improves the forecast: without one they resolve the point against a coarse global elevation model, and in anything but flat country that is enough to shift the whole temperature curve. By default the card takes the altitude from your Home Assistant location, along with the coordinates, so there is nothing to do. Set `altitude` yourself whenever you configure a custom `latitude`/`longitude`.
 
 ### Option Notes
 - `show_precipitation` replaces the deprecated `show_rain` option. For backward compatibility, `show_rain` is still supported but will be ignored if `show_precipitation` is set.
@@ -155,7 +155,7 @@ Below are the main configuration options for the Meteogram Card:
 - `aspect_ratio` only applies in `panel` or `grid` layout modes.
 - `diagnostics` enables a status panel for troubleshooting API/data issues.
 - `display_mode` is the preferred way to set the card's display style. Use `"focussed"` for a minimal chart-only view.
-- `altitude` is **recommended**, not merely optional. met.no's own guidance is that supplying it materially improves the forecast: without one they resolve the point against a coarse global elevation model, and in anything but flat country that is enough to shift the whole temperature curve. If you have set neither `latitude` nor `longitude`, the card already uses your Home Assistant home location *and* its elevation, so there is nothing to do. Set it yourself whenever you point the card at explicit coordinates — that is the case where the card has no elevation to inherit.
+- `altitude` is **recommended**, not merely optional. met.no's own guidance is that supplying it materially improves the forecast: without one they resolve the point against a coarse global elevation model, and in anything but flat country that is enough to shift the whole temperature curve. By default the card takes the altitude from your Home Assistant location, along with the coordinates, so there is nothing to do. Set `altitude` yourself whenever you configure a custom `latitude`/`longitude`.
 
 ### Layout Mode (`layout_mode`)
 
