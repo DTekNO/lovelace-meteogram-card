@@ -1,4 +1,4 @@
-# Meteogram Card 2026.11.0
+# Meteogram Card 2026.11.1
 <!--
 Release-notes recipe (kept here so each release reads the same):
   1. Copy the newest section of CHANGELOG.md below this heading, verbatim.
@@ -45,7 +45,7 @@ Paste the whole file (minus this comment) as the GitHub release body.
 - **An expired forecast cannot schedule a zero-delay refresh:** The refresh timer is floored at
   one minute.
 
-**Full Changelog**: https://github.com/DTekNO/lovelace-meteogram-card/compare/v2026.8.3...v2026.11.0
+**Full Changelog**: https://github.com/DTekNO/lovelace-meteogram-card/compare/v2026.8.3...v2026.11.1
 
 ---
 
@@ -55,8 +55,7 @@ A Lovelace card that draws a **meteogram** — the forecast as one chart rather 
 icons. Temperature, precipitation, cloud cover, pressure and wind share a single time axis,
 so you read the shape of the coming weather instead of assembling it from tiles.
 
-Data comes from the **Norwegian Meteorological Institute (MET Norway)**, either straight
-from their API using your coordinates, or from any Home Assistant `weather` entity you
+Data comes from the **Norwegian Meteorological Institute (MET Norway)**, or from any Home Assistant `weather` entity you
 already have.
 
 **What the card does**

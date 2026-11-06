@@ -571,4 +571,4 @@ Fresh forecast data retrieved from service
 
 ---
 
-*Update this as the architecture changes. Last updated: November 2026, during 2026.11.0.*
+*Update this as the architecture changes. Last updated: November 2026, during 2026.11.1.*
