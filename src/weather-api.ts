@@ -96,9 +96,27 @@ export class WeatherAPI {
     private _throttledUntil = 0;
     private debug: boolean;
 
+    /**
+     * met.no truncates here, so we do.
+     *
+     * Their terms: "Truncate latitude and longitude to a maximum of 4 decimal places",
+     * and for newer products "requests with 5+ decimals will return a 403 Forbidden".
+     * It is also what lets their edge cache work at all — full-precision coordinates give
+     * every installation a unique URL, so every request would be an origin miss.
+     *
+     * Enforced in the constructor rather than by the callers, because the callers are
+     * where it kept going wrong: the rule used to be written out at five separate sites,
+     * three that built this object and two that built the cache key, and the one place
+     * that actually composed the met.no URL simply trusted whatever it was handed. Four
+     * decimals is about 11 m, far finer than a forecast grid cell.
+     */
+    private static _coord(v: number): number {
+        return parseFloat(Number(v).toFixed(4));
+    }
+
     constructor(lat: number, lon: number, altitude?: number, debug: boolean = false) {
-        this.lat = lat;
-        this.lon = lon;
+        this.lat = WeatherAPI._coord(lat);
+        this.lon = WeatherAPI._coord(lon);
         this.debug = debug;
         if (Number.isFinite(altitude)) {
             this.altitude = altitude;
@@ -438,7 +456,8 @@ export class WeatherAPI {
         // Clean up old entries before saving new ones
         WeatherAPI.cleanupOldCacheEntries();
         
-        const key = WeatherAPI.encodeCacheKey(Number(this.lat.toFixed(4)), Number(this.lon.toFixed(4)), this.altitude !== undefined ? Number(this.altitude.toFixed(2)) : undefined);
+        // lat/lon are already truncated by the constructor — see WeatherAPI._coord.
+        const key = WeatherAPI.encodeCacheKey(this.lat, this.lon, this.altitude !== undefined ? Number(this.altitude.toFixed(2)) : undefined);
         let cacheObj: {
             ["forecast-data"]?: Record<string, {
                 expiresAt: number,
@@ -489,7 +508,8 @@ export class WeatherAPI {
 
     // Load forecast data from localStorage
     loadCacheFromStorage() {
-        const key = WeatherAPI.encodeCacheKey(Number(this.lat.toFixed(4)), Number(this.lon.toFixed(4)), this.altitude !== undefined ? Number(this.altitude.toFixed(2)) : undefined);
+        // lat/lon are already truncated by the constructor — see WeatherAPI._coord.
+        const key = WeatherAPI.encodeCacheKey(this.lat, this.lon, this.altitude !== undefined ? Number(this.altitude.toFixed(2)) : undefined);
         let shouldCleanupCache = false;
         
         try {

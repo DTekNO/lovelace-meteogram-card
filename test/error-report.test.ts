@@ -28,6 +28,45 @@ function apiWithError(status: number | null, message: string): WeatherAPI {
   return api;
 }
 
+describe("coordinate truncation", () => {
+  /**
+   * met.no: "Truncate latitude and longitude to a maximum of 4 decimal places", and for
+   * newer products "requests with 5+ decimals will return a 403 Forbidden". It is also
+   * what lets their edge cache work — full-precision coordinates give every install a
+   * unique URL and so an origin miss every time.
+   *
+   * Enforced in the constructor because the callers are where it went wrong: the rule
+   * was written out at five separate sites and the one place that composed the URL
+   * trusted whatever it was given.
+   */
+  it("truncates to four decimals, whatever the caller passes", () => {
+    const api = new WeatherAPI(59.940870063425635, 5.483644172342627);
+    expect(api.lat).toBe(59.9409);
+    expect(api.lon).toBe(5.4836);
+  });
+
+  it("leaves coordinates that are already short alone", () => {
+    const api = new WeatherAPI(59.94, -5.5);
+    expect(api.lat).toBe(59.94);
+    expect(api.lon).toBe(-5.5);
+  });
+
+  it("is idempotent, so a caller that also truncates changes nothing", () => {
+    const once = new WeatherAPI(59.940870063425635, 5.483644172342627);
+    const twice = new WeatherAPI(once.lat, once.lon);
+    expect(twice.lat).toBe(once.lat);
+    expect(twice.lon).toBe(once.lon);
+  });
+
+  it("never emits more than four decimals, including negatives and rounding edges", () => {
+    for (const v of [0.00005, -0.00005, 12.34565, -89.99999, 179.99999, 0]) {
+      const api = new WeatherAPI(v, v);
+      const decimals = (String(api.lat).split(".")[1] ?? "").length;
+      expect(decimals).toBeLessThanOrEqual(4);
+    }
+  });
+});
+
 describe("summariseBody", () => {
   it("keeps the words and drops the markup", () => {
     const out = summariseBody(GATEWAY_502);

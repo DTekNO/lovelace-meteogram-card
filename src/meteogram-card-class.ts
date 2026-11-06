@@ -2254,26 +2254,46 @@ export class MeteogramCard extends LitElement {
 
   // Load location from localStorage under "meteogram-card-default-location"
 
+  /**
+   * The WeatherAPI for the current location, rebuilt only when the location moves.
+   *
+   * One place, because there were three — in the config branch, in the Home Assistant
+   * fallback, and again in fetchWeatherData — each repeating the same four-part "has it
+   * moved" test and its own copy of the coordinate truncation. They were identical, but
+   * only by inspection: checking that every one of them truncated took reading all
+   * three, and a fourth added later would silently have sent met.no full-precision
+   * coordinates, which is a 403 under their terms.
+   *
+   * Truncation itself now lives in the WeatherAPI constructor, so comparing the stored
+   * lat/lon against freshly truncated values is like for like, and a caller that passes
+   * raw coordinates cannot cause a rebuild on every call.
+   */
+  private _ensureWeatherApi(lat: number, lon: number): WeatherAPI {
+    const rLat = parseFloat(Number(lat).toFixed(4));
+    const rLon = parseFloat(Number(lon).toFixed(4));
+    if (
+      !this._weatherApiInstance ||
+      this._weatherApiInstance.lat !== rLat ||
+      this._weatherApiInstance.lon !== rLon ||
+      this._weatherApiInstance.altitude !== this.altitude
+    ) {
+      this._weatherApiInstance = new WeatherAPI(
+        rLat,
+        rLon,
+        this.altitude,
+        this.debug
+      );
+    }
+    return this._weatherApiInstance;
+  }
+
   // Check if we need to get location from HA
   private _checkAndUpdateLocation() {
     // Try to get location from config first
     if (this.latitude !== undefined && this.longitude !== undefined) {
       this.latitude = parseFloat(Number(this.latitude).toFixed(4));
       this.longitude = parseFloat(Number(this.longitude).toFixed(4));
-      // Initialize WeatherAPI instance if not already set or if lat/lon/altitude changed
-      if (
-        !this._weatherApiInstance ||
-        this._weatherApiInstance.lat !== this.latitude ||
-        this._weatherApiInstance.lon !== this.longitude ||
-        this._weatherApiInstance.altitude !== this.altitude
-      ) {
-        this._weatherApiInstance = new WeatherAPI(
-          this.latitude,
-          this.longitude,
-          this.altitude,
-          this.debug
-        );
-      }
+      this._ensureWeatherApi(this.latitude, this.longitude);
       return;
     }
 
@@ -2312,20 +2332,10 @@ export class MeteogramCard extends LitElement {
           this.altitude = Math.round(Number(hassConfig.elevation));
           this._altitudeFromHome = true;
         }
-        // Initialize WeatherAPI instance if not already set or if lat/lon changed
-        if (
-          !this._weatherApiInstance ||
-          this._weatherApiInstance.lat !== this.latitude ||
-          this._weatherApiInstance.lon !== this.longitude ||
-          this._weatherApiInstance.altitude !== this.altitude
-        ) {
-          this._weatherApiInstance = new WeatherAPI(
-            this.latitude,
-            this.longitude,
-            this.altitude,
-            this.debug
-          );
-        }
+        // After the elevation above, not before: altitude is part of the identity this
+        // compares on, so adopting HA's has to happen first or the instance is rebuilt
+        // on the very next call.
+        this._ensureWeatherApi(this.latitude, this.longitude);
         this._debugLog(
           `[${CARD_NAME}] Using HA location: ${this.latitude}, ${this.longitude}` +
             (this._altitudeFromHome ? ` at ${this.altitude}m (from HA)` : "")
@@ -2476,21 +2486,11 @@ export class MeteogramCard extends LitElement {
       }
     }
 
-    // Ensure WeatherAPI instance is initialized
-    if (
-      !this._weatherApiInstance ||
-      this._weatherApiInstance.lat !== lat ||
-      this._weatherApiInstance.lon !== lon ||
-      this._weatherApiInstance.altitude !== this.altitude
-    ) {
-      this._weatherApiInstance = new WeatherAPI(
-        lat!,
-        lon!,
-        this.altitude,
-        this.debug
-      );
-    }
-    const weatherApi = this._weatherApiInstance;
+    // Ensure WeatherAPI instance is initialized. Taking the return value rather than
+    // re-reading the field is what keeps it non-null for the rest of this method — the
+    // old inline `if (!this._weatherApiInstance || …)` block was doing that narrowing
+    // as a side effect.
+    const weatherApi = this._ensureWeatherApi(lat!, lon!);
 
     // If a fetch is already in progress, return the same promise
     if (this.weatherDataPromise) {
