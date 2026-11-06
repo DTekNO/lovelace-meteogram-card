@@ -1,5 +1,9 @@
 import { LitElement, css, html, svg, PropertyValues } from "lit";
-import { attributionStatus, retryDelayMs } from "./api-status";
+import {
+  attributionStatus,
+  jitteredRetryDelayMs,
+  refreshDelayAfterExpiryMs,
+} from "./api-status";
 import * as d3 from 'd3';
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -3280,7 +3284,7 @@ export class MeteogramCard extends LitElement {
         // the data is stale, and the catch never sees it. Without this the card never
         // asks again. See API_RETRY_BACKOFF_MS.
         if (this._apiFailures > 0) {
-          const delay = retryDelayMs(this._apiFailures);
+          const delay = jitteredRetryDelayMs(this._apiFailures);
           if (this._weatherRefreshTimeout)
             clearTimeout(this._weatherRefreshTimeout);
           this._debugLog(
@@ -3292,14 +3296,19 @@ export class MeteogramCard extends LitElement {
             this._scheduleDrawMeteogram("retry-after-api-failure", true);
           }, delay);
         }
-        // --- SCHEDULE REFRESH 60s AFTER expiresAt ---
+        // --- SCHEDULE REFRESH A SPREAD INTERVAL AFTER expiresAt ---
         else if (this.apiExpiresAt) {
           const now = Date.now();
+          // The offset is drawn fresh each time rather than fixed at 60 s, because
+          // met.no's edge hands every client in a coordinate cell the same absolute
+          // Expires — so a constant offset fires them all together and the next
+          // response locks them there. See refreshDelayAfterExpiryMs.
+          //
           // Floored, not clamped to zero: see MIN_REFRESH_DELAY_MS. A forecast that
           // has already expired must still wait before the next attempt, or the
           // re-arming below turns into a spin.
           const delay = Math.max(
-            this.apiExpiresAt + 60000 - now,
+            this.apiExpiresAt + refreshDelayAfterExpiryMs() - now,
             MIN_REFRESH_DELAY_MS
           );
           if (this._weatherRefreshTimeout)
@@ -3360,7 +3369,9 @@ export class MeteogramCard extends LitElement {
           // blank-card case, which is also the one a user is most likely to leave open
           // and staring at them.
           const retryMs =
-            this._apiFailures > 0 ? retryDelayMs(this._apiFailures) : 60000;
+            this._apiFailures > 0
+              ? jitteredRetryDelayMs(this._apiFailures)
+              : 60000;
           const retryText =
             retryMs >= 60000 * 2
               ? `retrying in ${Math.round(retryMs / 60000)} minutes`

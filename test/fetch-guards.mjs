@@ -73,6 +73,53 @@ check(quota.throttleIntact,
 check(quota.attempts >= 2, "one attempt is made to free room before giving up",
   `${quota.attempts} setItem attempts`);
 
+// ── a 304 must keep the forecast, not raise ──────────────────────────────────
+// If-Modified-Since is sent on every refresh once a forecast is held, so this is now
+// the common path rather than an edge case. The branch handling it used to throw
+// unconditionally — it was unreachable while nothing sent the header, and would have
+// turned every unchanged forecast into an error card the moment one did.
+const notModified = await page.evaluate(async () => {
+  const api = document.querySelector("meteogram-card")._weatherApiInstance;
+  const realFetch = window.fetch;
+  let sentHeader = null;
+  const nextExpiry = new Date(Date.now() + 30 * 60 * 1000);
+  const lastMod = new Date(Date.now() - 10 * 60 * 1000).toUTCString();
+  window.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input?.url ?? "";
+    if (url.includes("met.no")) {
+      sentHeader = (init?.headers ?? {})["If-Modified-Since"] ?? null;
+      return new Response(null, { status: 304,
+        headers: { expires: nextExpiry.toUTCString(), "last-modified": lastMod } });
+    }
+    return realFetch(input, init);
+  };
+  const held = api._forecastData;
+  api._lastModified = lastMod;
+  api._expiresAt = Date.now() - 1000;      // expired, so a fetch is due
+  api._lastFetchTime = null;
+  api._throttledUntil = 0;
+  let error = null, served = null;
+  try { served = await api.getForecastData(); } catch (e) { error = String(e.message ?? e); }
+  const out = {
+    sentHeader,
+    error,
+    servedSame: served === held && !!served?.time?.length,
+    expiryMovedForward: api._expiresAt > Date.now(),
+  };
+  window.fetch = realFetch;
+  return out;
+});
+
+check(notModified.sentHeader !== null,
+  "If-Modified-Since is sent once a forecast is held",
+  `header ${notModified.sentHeader ? "sent" : "MISSING"}`);
+check(notModified.error === null,
+  "a 304 is not an error", notModified.error ?? "no error");
+check(notModified.servedSame,
+  "the forecast already held is served unchanged");
+check(notModified.expiryMovedForward,
+  "and the expiry is re-armed, so the card does not refetch immediately");
+
 // ── a 429 must hold the card off, not release it ─────────────────────────────
 const rate = await page.evaluate(async () => {
   let check1 = false;

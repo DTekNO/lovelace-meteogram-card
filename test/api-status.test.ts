@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   API_RETRY_BACKOFF_MS,
+  RETRY_JITTER,
   attributionStatus,
+  jitteredRetryDelayMs,
+  refreshDelayAfterExpiryMs,
   retryDelayMs,
 } from "../src/api-status";
 
@@ -50,6 +53,70 @@ describe("retryDelayMs", () => {
     }
     expect(calls).toBeLessThanOrEqual(5);
     expect(API_RETRY_BACKOFF_MS[API_RETRY_BACKOFF_MS.length - 1]).toBe(60 * MIN);
+  });
+});
+
+describe("refreshDelayAfterExpiryMs", () => {
+  /**
+   * met.no's edge hands every client in a coordinate cell the same stored response with
+   * the same absolute Expires — measured 06.11.2026, two requests 195 s apart returning
+   * an identical `expires: 07:25:13`. A fixed offset therefore fires every device in the
+   * cell at the same instant, and the next response re-syncs them.
+   */
+  it("never schedules before the expiry, which their terms forbid", () => {
+    for (const r of [0, 0.0001, 0.5, 0.9999, 1]) {
+      expect(refreshDelayAfterExpiryMs(() => r)).toBeGreaterThan(0);
+    }
+  });
+
+  it("spreads over the asked-for 60–300 s", () => {
+    expect(refreshDelayAfterExpiryMs(() => 0)).toBe(60_000);
+    expect(refreshDelayAfterExpiryMs(() => 1)).toBe(300_000);
+    expect(refreshDelayAfterExpiryMs(() => 0.5)).toBe(180_000);
+  });
+
+  it("actually varies, so two cards in one cell do not fire together", () => {
+    const draws = new Set(
+      Array.from({ length: 200 }, () => Math.round(refreshDelayAfterExpiryMs()))
+    );
+    expect(draws.size).toBeGreaterThan(100);
+  });
+
+  it("stays inside the window, so a refresh never slips a whole cycle", () => {
+    for (let i = 0; i < 500; i++) {
+      expect(refreshDelayAfterExpiryMs()).toBeLessThan(32 * 60_000);
+    }
+  });
+});
+
+describe("jitteredRetryDelayMs", () => {
+  it("keeps the mean on the nominal backoff", () => {
+    const n = 20_000;
+    let total = 0;
+    for (let i = 0; i < n; i++) total += jitteredRetryDelayMs(1);
+    expect(total / n).toBeCloseTo(retryDelayMs(1), -4);
+  });
+
+  it("spreads either side, since a stale forecast has no expiry left to respect", () => {
+    expect(jitteredRetryDelayMs(1, () => 0)).toBeCloseTo(5 * MIN * (1 - RETRY_JITTER), 0);
+    expect(jitteredRetryDelayMs(1, () => 1)).toBeCloseTo(5 * MIN * (1 + RETRY_JITTER), 0);
+  });
+
+  it("never returns zero or negative, which would spin the timer", () => {
+    for (const f of [1, 2, 3, 4, 5, 20]) {
+      for (const r of [0, 0.5, 1]) {
+        expect(jitteredRetryDelayMs(f, () => r)).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("breaks up a fleet that failed at the same instant", () => {
+    // 1000 cards failing together, first retry. Without jitter every one of them
+    // lands in the same millisecond.
+    const landings = new Set(
+      Array.from({ length: 1000 }, () => Math.round(jitteredRetryDelayMs(1)))
+    );
+    expect(landings.size).toBeGreaterThan(500);
   });
 });
 

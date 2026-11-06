@@ -86,6 +86,17 @@ export class WeatherAPI {
     private _fetchPromise: Promise<void> | null = null;
     private _lastFetchTime: number | null = null; // Track last fetch timestamp
     /**
+     * The `Last-Modified` of the forecast currently held, echoed back as
+     * `If-Modified-Since` on the next request.
+     *
+     * met.no's terms ask for this directly — "Use If-Modified-Since to avoid
+     * re-downloading unchanged data. It should match the previous Last-Modified value" —
+     * and the endpoint honours it: the same request with the header returns `304` with a
+     * zero-length body instead of ~6 KB gzipped. Cached alongside the forecast, so it
+     * survives a reload and the first request after one can be conditional too.
+     */
+    private _lastModified: string | null = null;
+    /**
      * Set when met.no answers 429, and deliberately not cleared by the failure path.
      *
      * `_lastFetchTime` is reset on any fetch failure so a dropped connection can be
@@ -461,6 +472,7 @@ export class WeatherAPI {
         let cacheObj: {
             ["forecast-data"]?: Record<string, {
                 expiresAt: number,
+                lastModified?: string,
                 data: ForecastData
             }>
         } = {};
@@ -475,6 +487,10 @@ export class WeatherAPI {
         if (!cacheObj["forecast-data"]) cacheObj["forecast-data"] = {};
         cacheObj["forecast-data"][key] = {
             expiresAt: this._expiresAt,
+            // Stored so the first request after a reload can still be conditional.
+            // Optional: an entry written by an older build simply has none, and the
+            // request is then unconditional exactly as before.
+            ...(this._lastModified ? { lastModified: this._lastModified } : {}),
             data: this._forecastData
         };
         // Storing is best-effort, and must never be reported as a fetch failure.
@@ -518,6 +534,7 @@ export class WeatherAPI {
                 let cacheObj: {
                     ["forecast-data"]?: Record<string, {
                         expiresAt: number,
+                        lastModified?: string,
                         data: ForecastData
                     }>
                 } = {};
@@ -564,6 +581,7 @@ export class WeatherAPI {
                                 );
                             }
                             this._forecastData = entry.data;
+                            this._lastModified = entry.lastModified ?? null;
                         }
                     }
                     
@@ -627,6 +645,12 @@ export class WeatherAPI {
                 'Origin': window.location.origin,
                 'Accept': 'application/json'
             };
+            // Conditional where we can be. A 304 costs no body at all, and met.no asks
+            // for it. Only sent when a forecast is actually held, because a 304 with
+            // nothing to fall back on would be a response we could not use.
+            if (this._lastModified && this._forecastData) {
+                headers['If-Modified-Since'] = this._lastModified;
+            }
 
             // Always use dedicated forecast URL
             // log impending call to fetch
@@ -706,7 +730,25 @@ export class WeatherAPI {
             }
 
             if (this.lastStatusCode === 304) {
-                throw new Error("API returned 304 but no cached data is available.");
+                // Not modified: what we hold is current, and met.no has told us so for
+                // the price of a header. Re-arm the expiry from this response and keep
+                // the forecast.
+                //
+                // This branch used to throw unconditionally. It was unreachable then,
+                // because nothing ever sent If-Modified-Since — so the first conditional
+                // request would have turned every unchanged forecast into an error card.
+                if (!this._forecastData) {
+                    throw new Error("API returned 304 but no cached data is available.");
+                }
+                this._expiresAt = WeatherAPI._expiryFrom(expires, servedHeader);
+                if (servedHeader) this._lastModified = servedHeader;
+                WeatherAPI.METEOGRAM_CARD_API_SUCCESS_COUNT++;
+                this.saveCacheToStorage();
+                this._debugLog(
+                    `[weather-api] 304 Not Modified; forecast held, expiry re-armed to `
+                    + `${new Date(this._expiresAt).toISOString()}`
+                );
+                return;
             }
 
             if (!response.ok) {
@@ -722,6 +764,8 @@ export class WeatherAPI {
             // Parse and store forecast data
             this.assignMeteogramDataFromRaw(jsonData);
             this._expiresAt = WeatherAPI._expiryFrom(expires, servedHeader);
+            // Kept so the next request can be conditional. See _lastModified.
+            this._lastModified = servedHeader ?? null;
             this.saveCacheToStorage();
         } catch (error: unknown) {
             this.lastError = error;

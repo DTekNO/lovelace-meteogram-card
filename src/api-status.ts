@@ -41,6 +41,54 @@ export function retryDelayMs(failures: number): number {
   return API_RETRY_BACKOFF_MS[i];
 }
 
+/**
+ * How long after a forecast expires to ask for the next one.
+ *
+ * Spread, not a constant, and this is the one that matters most in normal running.
+ * met.no's edge serves one stored response to every client in a coordinate cell, and
+ * that response carries one absolute `Expires` — so a fixed offset makes every device
+ * sharing the cell fire at the same instant, and the next response re-syncs them. It is
+ * self-sustaining rather than transient. Their terms ask for exactly this: "Don't
+ * schedule many requests at the same moment. Add a random offset so traffic is spread
+ * evenly."
+ *
+ * One-sided deliberately. The spread is *after* the expiry and never before it, because
+ * "Never repeat a request before the time in the Expires header" is also their rule, and
+ * a symmetric jitter would breach it half the time. Four minutes of spread across a
+ * ~32-minute cycle de-synchronises a cell without meaningfully ageing the forecast.
+ */
+export const REFRESH_SPREAD_MS = { min: 60_000, max: 300_000 } as const;
+
+export function refreshDelayAfterExpiryMs(
+  rand: () => number = Math.random
+): number {
+  const { min, max } = REFRESH_SPREAD_MS;
+  return min + rand() * (max - min);
+}
+
+/**
+ * Spread a retry so a fleet recovering from one outage does not arrive together.
+ *
+ * The backoff above is identical on every card, and an outage is the one event that
+ * synchronises all of them — they fail at the same moment and would otherwise retry at
+ * the same moment, repeatedly, for as long as it lasted. Symmetric here, unlike the
+ * refresh: there is no Expires left to respect once the forecast is stale, so keeping
+ * the mean on the nominal delay is the better property.
+ *
+ * Worth being plain about the limit: jitter removes the spike, not the volume. A fleet
+ * large enough to exceed met.no's 20 requests per second when all of it needs data at
+ * once still exceeds it, just spread over minutes instead of seconds.
+ */
+export const RETRY_JITTER = 0.4;
+
+export function jitteredRetryDelayMs(
+  failures: number,
+  rand: () => number = Math.random
+): number {
+  const base = retryDelayMs(failures);
+  return base * (1 + (rand() * 2 - 1) * RETRY_JITTER);
+}
+
 export type ApiStatusKind = "idle" | "ok" | "stale" | "down";
 
 export interface ApiStatus {
