@@ -91,7 +91,8 @@ document.addEventListener('visibilitychange', () => {
 {
   "forecast-data": {
     [locationKey: string]: {
-      expiresAt: number,    // Unix timestamp
+      expiresAt: number,     // Unix timestamp
+      lastModified?: string, // echoed back as If-Modified-Since; absent on pre-2026.11 entries
       data: ForecastData
     }
   }
@@ -110,6 +111,68 @@ document.addEventListener('visibilitychange', () => {
 ['time', 'temperature', 'rain', 'rainMin', 'rainMax', 'snow', 
  'cloudCover', 'windSpeed', 'windGust', 'windDirection', 'symbolCode', 'pressure']
 ```
+
+## Rules for talking to met.no
+
+**These are not style preferences.** met.no's terms cap *the whole card* — every
+installation together, not each user — at 20 requests per second. At roughly 59k
+downloads the healthy steady state already sits within a factor of two of that ceiling,
+so a regression here does not inconvenience one user: it gets the card banned for all of
+them at once. Several of the rules below exist because the opposite was shipped at some
+point and had to be found in production.
+
+Where they live: `src/weather-api.ts` (fetching and cache), `src/api-status.ts` (timing),
+`src/meteogram-card-class.ts` (the two timers). `test/fetch-guards.mjs` exists to protect
+them and is the first thing to run after touching any of it.
+
+1. **Never request before `Expires`.** The cache gate at the top of `getForecastData` is
+   the primary control, and every fallback in `_expiryFrom` must err *long*. Fetching
+   less often is always the safe direction.
+2. **Truncate coordinates to 4 decimals** — in the `WeatherAPI` constructor, and nowhere
+   else. Five or more is a 403 on newer met.no products, and full precision also defeats
+   their edge cache by giving every installation a unique URL. It was written out at five
+   call sites once, which is how it came to be missing from the one that built the URL.
+3. **Send `If-Modified-Since`** from the stored `Last-Modified` whenever a forecast is
+   held, and treat `304` as success: re-arm the expiry, keep the data. It is never an
+   error, and must never throw when a forecast is in hand.
+4. **Jitter every timer.** Refresh is expiry + 60–300 s, one-sided and never earlier.
+   Retry is the backoff ±40%. A fixed offset synchronises every client in a coordinate
+   cell, because met.no's edge hands them all one response carrying one absolute
+   `Expires` — measured, two requests 195 s apart came back with an identical expiry.
+5. **Failures escalate** — 5, 10, 20, 40, 60 minutes, reset on success. No fixed short
+   retry anywhere in the fetch path.
+6. **A failure path must never clear a rate limit.** This is the recurring bug in this
+   file's history, in three separate forms: a 429 handler that cleared the throttle, a
+   storage error treated as a fetch error, and a stale `apiExpiresAt` flooring the
+   refresh delay at 60 s for the length of an outage.
+7. **Honour a 429 for as long as it asks**, bounded. `_throttledUntil` is checked in both
+   `getForecastData` and `_fetchWeatherDataFromAPI`, because a back-off one caller
+   honours and another does not is no back-off at all.
+8. **Always arm the next attempt.** A failure that still has cached data to draw
+   *resolves* rather than throwing, so it never reaches a `catch`. If nothing schedules a
+   retry the card freezes silently until the page is reloaded — which is exactly what
+   happened, for as long as it took a user to report it.
+9. **Serve stale rather than fetch harder.** During an outage draw the cached chart and
+   say so on the attribution icon. Never shorten the cadence to recover sooner.
+10. **Add no second path to met.no.** Everything goes through `getForecastData`; that is
+    where the gates are, and a new `fetch` elsewhere bypasses all ten of these.
+
+**Before changing the cadence**, work the fleet arithmetic rather than reasoning about
+one card: requests/hour per open view × concurrently open views. One view is ~1.82 req/h
+(a ~32 min window plus the spread), and the 20 req/s ceiling is crossed at roughly 39,500
+open views.
+
+**Two things that are not fixable in this codebase**, so do not try. A browser cannot set
+a `User-Agent` — `fetch` forbids the header — so the card cannot identify itself to
+met.no the way their terms ask; that is one reason the `weather` entity route is the
+lighter choice and worth recommending, since it is one server-side fetch per Home
+Assistant rather than one per device. And `ha-form`'s 24px row margin lives in its own
+shadow root with no custom property behind it, so editor row spacing cannot be changed
+from here at all.
+
+**Gotcha when testing:** the Playwright tests in `test/*.mjs` load `dist/`, not `src/`.
+Run `npm run build` before them or you will be testing the previous build — the symptom
+is assertions failing against error text or a card version you have already changed.
 
 ## Chart Rendering
 

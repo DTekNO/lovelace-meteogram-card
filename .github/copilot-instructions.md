@@ -24,9 +24,16 @@ The card implements TWO distinct data retrieval patterns:
 - Cache: `meteogram-card-entity-weather-cache` (per-entity timestamps)
 
 #### Met.no API
-- Direct HTTP calls with User-Agent header required
-- Cache: `metno-weather-cache` with `expiresAt` timestamps
-- Respects API rate limits and caching headers
+- Direct cross-origin calls from the browser. **A `User-Agent` cannot be set** — `fetch`
+  forbids the header — so the card cannot identify itself the way met.no's terms ask.
+  This is one reason the weather-entity route is the lighter option: one server-side
+  fetch per Home Assistant instead of one per device.
+- Cache: `metno-weather-cache`, keyed by 4-decimal coordinates, carrying `expiresAt` and
+  the `Last-Modified` echoed back as `If-Modified-Since`
+- **Before changing anything in this path, read *Rules for talking to met.no* in
+  `doc/CLAUDE.md`.** met.no's 20 req/s limit applies to the whole card across every
+  installation, not per user, and breaking one of those rules gets everyone banned at
+  once.
 
 ### 2. Intelligent Subscription Management
 
