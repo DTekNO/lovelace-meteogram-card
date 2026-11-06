@@ -1,6 +1,6 @@
 {
   "name": "meteogram-card",
-  "version": "2026.8.3",
+  "version": "2026.11.0",
   "description": "A custom card showing a meteogram with wind barbs, cloud cover, atmospheric pressure, and precipitation for Home Assistant",
   "type": "module",
   "main": "dist/meteogram-card.js",
