@@ -21,9 +21,46 @@ Paste the whole file (minus this comment) as the GitHub release body.
   longer sent, and a guard now strips anything that would preflight.
 
 > Supersedes **2026.11.1**, which could not fetch from met.no at all once a
-> forecast had been cached. If you are on 2026.11.1, update.
+> forecast had been cached. 2026.11.1 has been withdrawn; everything it contained
+> is included below.
 
-**Full Changelog**: https://github.com/DTekNO/lovelace-meteogram-card/compare/v2026.11.1...v2026.11.2
+## Also in this release (from the withdrawn 2026.11.1)
+
+### Added
+
+- **Redraw log identifies the card:** Each line carries the card element's number, and the
+  panel counts draws per trigger for the whole page.
+
+### Changed
+
+- **Fewer and lighter requests to met.no:** Repeated requests send `If-Modified-Since`, so an
+  unchanged forecast comes back as an empty `304`. The refresh and retry timers are jittered,
+  so cards no longer fire in lockstep.
+- **Altitude is recommended, not optional:** The editor says why it matters, that it comes from
+  your Home Assistant location by default, and to set it when you configure a custom location.
+
+### Fixed
+
+- **Duplicate code removed and improved:** The request builder is rewritten to avoid duplicated code and comply with met.no truncating requirement only one place.
+- **Recovers after a weather service outage:** A failed fetch schedules its own retry, backing
+  off 5, 10, 20, 40 then 60 minutes, and redraws when the forecast returns. Before this a card
+  could freeze until reloaded, or retry every 60 seconds for the length of the outage.
+- **Information icon shows the real state:** Green when the forecast is current, amber when a
+  cached one is on screen, red when there is nothing to draw — with the reason and the next
+  retry in the tooltip.
+- **API errors no longer hide the diagnostics:** The failed response is summarised to one line
+  instead of being rendered into the card, and the report says what failed, when the last good
+  forecast arrived and how stale the chart is.
+- **A wrong device clock no longer refetches on every redraw:** Cache validity is stored as a
+  duration rather than an absolute time.
+- **Two failure paths no longer removed the rate limit:** A full browser storage quota is no
+  longer treated as a fetch failure, and a 429 is honoured for as long as met.no asks.
+- **No wasted chart draw before a replacement:** A re-attached card waits a moment before
+  drawing, so one Home Assistant is about to replace costs nothing.
+- **An expired forecast cannot schedule a zero-delay refresh:** The refresh timer is floored at
+  one minute.
+
+**Full Changelog**: https://github.com/DTekNO/lovelace-meteogram-card/compare/v2026.8.3...v2026.11.2
 
 ---
 
