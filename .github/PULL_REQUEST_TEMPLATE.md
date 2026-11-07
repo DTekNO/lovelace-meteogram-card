@@ -49,6 +49,14 @@ protecting against, is in [`AGENTS.md`](../AGENTS.md) under
 - [ ] **An outage serves the stale chart** rather than fetching harder.
 - [ ] **No second path to met.no** was added. Everything goes through
       `getForecastData`, which is where the gates are.
+- [ ] **No request header outside the CORS safelist** was added to the met.no fetch.
+      Only `Accept`, `Accept-Language`, `Content-Language`, `Content-Type` and `Range`
+      are safe. Anything else — `If-Modified-Since`, `If-None-Match`, an API key —
+      preflights, and met.no answers `OPTIONS` with no `Access-Control-Allow-*` headers,
+      so the request never leaves the browser. This has broken a release once already.
+- [ ] **If you changed the request at all, you tested it in a real browser against the
+      real endpoint.** A stubbed `fetch` and a `curl` both pass while being blind to
+      CORS; in 2026.11.1 both did, and the release had to be withdrawn.
 - [ ] **`npm run build && node test/fetch-guards.mjs` passes.** This suite exists
       specifically to protect the rules above.
 

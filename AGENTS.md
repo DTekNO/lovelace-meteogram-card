@@ -165,19 +165,58 @@ them and is the first thing to run after touching any of it.
    say so on the attribution icon. Never shorten the cadence to recover sooner.
 10. **Add no second path to met.no.** Everything goes through `getForecastData`; that is
     where the gates are, and a new `fetch` elsewhere bypasses all ten of these.
+11. **Send no request header beyond the CORS safelist.** This one has now been discovered
+    the hard way twice — once in 2025, and again in 2026.11.1, which had to be withdrawn.
+    See *The CORS wall* below before touching `headers` in `_fetchWeatherDataFromAPI`.
+
+### The CORS wall
+
+The card fetches met.no **cross-origin from the browser**, and that constrains the
+request far more tightly than the terms alone suggest. Three separate mechanisms, and
+confusing them is what wasted the time:
+
+- **Forbidden header names.** `User-Agent` and `Origin` cannot be set by script at all —
+  `fetch` ignores them and the browser supplies its own. The `'Origin': …` line that was
+  in `headers` for years did nothing. So the card cannot identify itself to met.no the
+  way their terms ask, and no amount of effort will change that.
+- **The CORS safelist.** Only `Accept`, `Accept-Language`, `Content-Language`,
+  `Content-Type` and `Range` may be sent without turning the request into a *preflighted*
+  one. Anything else — `If-Modified-Since`, `If-None-Match`, an API key, a custom
+  diagnostic header — triggers an `OPTIONS` first.
+- **met.no does not answer preflight.** Their terms say so, and measuring confirms it:
+  `OPTIONS` on the forecast endpoint returns `204` with **no `Access-Control-Allow-*`
+  headers at all**. With no `Access-Control-Allow-Headers` the browser refuses to send
+  the real request, so the card never reaches met.no and sees a bare `TypeError: Failed
+  to fetch` **with no HTTP status** — which reads like a network fault and sends you
+  looking in the wrong place.
+
+2026.11.1 added `If-Modified-Since` because the terms ask for conditional requests. It
+broke every client that had a cached forecast, and only those: the header was attached
+only once a forecast was held, so the first fetch after installing succeeded and every
+one afterwards failed. `nonSafelistedHeaders()` now strips anything that would preflight,
+and `test/error-report.test.ts` asserts the safelist by name.
+
+**Blast radius, which is worth knowing before panicking.** Only the direct met.no path is
+exposed to any of this. A card pointed at a Home Assistant `weather` entity fetches
+through HA's own server, where none of these rules apply — so an outage or a CORS
+mistake hits only users on the direct API, who are mostly those without the met
+integration set up. It is one more reason to recommend entity mode.
+
+**Verifying anything in this area.** A stubbed `fetch` and a `curl` both pass while being
+completely blind to CORS, and in 2026.11.1 both did. The unit tests stub `fetch`, which
+can prove what the card does *with* a response and never that the request was allowed to
+leave the browser; `curl` is not a browser and is not subject to CORS at all. **Only a
+real browser making a real cross-origin request proves the transport.** Short of that,
+assert the header set directly — which is what the safelist test does, and it is cheap.
 
 **Before changing the cadence**, work the fleet arithmetic rather than reasoning about
 one card: requests/hour per open view × concurrently open views. One view is ~1.82 req/h
 (a ~32 min window plus the spread), and the 20 req/s ceiling is crossed at roughly 39,500
 open views.
 
-**Two things that are not fixable in this codebase**, so do not try. A browser cannot set
-a `User-Agent` — `fetch` forbids the header — so the card cannot identify itself to
-met.no the way their terms ask; that is one reason the `weather` entity route is the
-lighter choice and worth recommending, since it is one server-side fetch per Home
-Assistant rather than one per device. And `ha-form`'s 24px row margin lives in its own
-shadow root with no custom property behind it, so editor row spacing cannot be changed
-from here at all.
+**Not fixable in this codebase**, so do not try: the header limits above, and
+`ha-form`'s 24px row margin, which lives in its own shadow root with no custom property
+behind it — editor row spacing cannot be changed from a card at all.
 
 **Gotcha when testing:** the Playwright tests in `test/*.mjs` load `dist/`, not `src/`.
 Run `npm run build` before them or you will be testing the previous build — the symptom
