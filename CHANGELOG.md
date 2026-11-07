@@ -5,6 +5,17 @@ All notable changes to the Meteogram Card will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026.11.2] - 2026.11.07
+
+### Fixed
+
+- **The card could not reach met.no at all after 2026.11.1:** `If-Modified-Since`, added in
+  that release, is not a CORS-safelisted header, so it preflighted every request — and
+  met.no does not support preflight. The browser refused to send the request and the card
+  showed "Failed to fetch" with no status. It only bit once a forecast was cached, so the
+  first fetch after installing worked and every one after it failed. The header is no
+  longer sent, and a guard now strips anything that would preflight.
+
 ## [2026.11.1] - 2026.11.06
 
 ### Added

@@ -72,6 +72,32 @@ export function agoText(then: number, now: number = Date.now()): string {
     return `${Math.round(n / 60)} h ${back ? "ago" : "from now"}`;
 }
 
+/**
+ * The request headers a cross-origin `fetch` may carry without triggering a CORS
+ * preflight — the Fetch spec's safelist, minus the ones this card has no use for.
+ *
+ * met.no does not support preflight: an OPTIONS to the forecast endpoint answers 204
+ * with no `Access-Control-Allow-*` headers at all, so the browser refuses to send the
+ * real request and the card sees `TypeError: Failed to fetch` with no status. Adding
+ * one non-safelisted header therefore does not degrade the request, it destroys it.
+ *
+ * 2026.11.1 shipped `If-Modified-Since` and broke every client holding a cached
+ * forecast. Exported so a test can assert it, because a stubbed `fetch` cannot.
+ */
+export const CORS_SAFELISTED_REQUEST_HEADERS: ReadonlySet<string> = new Set([
+    "accept", "accept-language", "content-language", "content-type", "range",
+]);
+
+/** Header names here that a browser would preflight. Empty means the request can go. */
+export function nonSafelistedHeaders(headers: Record<string, string>): string[] {
+    return Object.keys(headers)
+        .map((h) => h.toLowerCase())
+        // `Origin` is a forbidden header name: the browser sets it and ignores ours, so
+        // it never reaches the safelist check and cannot cause a preflight.
+        .filter((h) => h !== "origin")
+        .filter((h) => !CORS_SAFELISTED_REQUEST_HEADERS.has(h));
+}
+
 export class WeatherAPI {
     static METEOGRAM_CARD_API_CALL_COUNT = 0;
     static METEOGRAM_CARD_API_SUCCESS_COUNT = 0;
@@ -645,11 +671,36 @@ export class WeatherAPI {
                 'Origin': window.location.origin,
                 'Accept': 'application/json'
             };
-            // Conditional where we can be. A 304 costs no body at all, and met.no asks
-            // for it. Only sent when a forecast is actually held, because a 304 with
-            // nothing to fall back on would be a response we could not use.
-            if (this._lastModified && this._forecastData) {
-                headers['If-Modified-Since'] = this._lastModified;
+            // NOT sent, and it cannot be. met.no's terms ask for If-Modified-Since, but
+            // `If-Modified-Since` is not a CORS-safelisted request header, so adding it
+            // turns this into a preflighted request — and the same terms say "CORS
+            // preflight requests aren't supported". Measured against the endpoint: the
+            // OPTIONS returns 204 with no Access-Control-Allow-* headers whatever, so the
+            // browser refuses to send the GET and the card sees `TypeError: Failed to
+            // fetch` with no status at all.
+            //
+            // Shipped in 2026.11.1 and broke every client that had a cached forecast,
+            // because the header was only added once one was held: the first fetch
+            // succeeded, every one after it failed. Only a same-origin proxy could carry
+            // a conditional request to met.no, so the Last-Modified below is stored and
+            // the 304 branch kept against that day, and nothing sends the header now.
+            //
+            // The lesson for the tests: the suite stubs `fetch`, so it can prove what the
+            // card does with a 304 and can never prove the request was allowed to leave
+            // the browser. _onlySafelistedHeaders below is the guard that would have
+            // caught this.
+
+            // Nothing may be added to `headers` above that a browser would preflight.
+            // See nonSafelistedHeaders — met.no answers OPTIONS with no CORS headers, so
+            // a preflighted request never leaves the browser at all.
+            const preflights = nonSafelistedHeaders(headers);
+            if (preflights.length) {
+                this._debugLog(
+                    `[weather-api] refusing to send preflight-triggering header(s): `
+                    + preflights.join(", "));
+                for (const h of Object.keys(headers)) {
+                    if (preflights.includes(h.toLowerCase())) delete headers[h];
+                }
             }
 
             // Always use dedicated forecast URL

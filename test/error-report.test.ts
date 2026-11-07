@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { WeatherAPI, agoText, escapeHtml, summariseBody } from "../src/weather-api";
+import {
+  CORS_SAFELISTED_REQUEST_HEADERS,
+  WeatherAPI,
+  agoText,
+  escapeHtml,
+  nonSafelistedHeaders,
+  summariseBody,
+} from "../src/weather-api";
 
 /**
  * The card hands its error text to Lit as `.innerHTML`, so the error report is markup.
@@ -212,5 +219,42 @@ describe("getDiagnosticText", () => {
     const api = apiWithError(429, "throttled");
     (api as any)._throttledUntil = Date.now() + 5 * 60_000;
     expect(api.getDiagnosticText()).toContain("Backing off until");
+  });
+});
+
+
+describe("CORS preflight guard", () => {
+  /**
+   * 2026.11.1 added `If-Modified-Since` because met.no's terms ask for it. That header
+   * is not CORS-safelisted, so it preflights — and the same terms say preflight is not
+   * supported. Measured: OPTIONS to the forecast endpoint returns 204 with no
+   * `Access-Control-Allow-*` headers, so the browser refuses to send the GET and the
+   * card reports `Failed to fetch` with no status. Every client holding a cached
+   * forecast broke, because the header was only added once one was held.
+   *
+   * The existing suite could not catch it: it stubs `fetch`, which proves what the card
+   * does with a response and never that the request was allowed to leave.
+   */
+  it("names the header that broke 2026.11.1", () => {
+    expect(nonSafelistedHeaders({ "If-Modified-Since": "x" })).toEqual(["if-modified-since"]);
+  });
+
+  it("passes the headers the card actually sends", () => {
+    expect(nonSafelistedHeaders({ Origin: "https://x", Accept: "application/json" })).toEqual([]);
+  });
+
+  it("ignores case, since header names are case-insensitive", () => {
+    expect(nonSafelistedHeaders({ ACCEPT: "a", "content-type": "b" })).toEqual([]);
+    expect(nonSafelistedHeaders({ "IF-NONE-MATCH": "x" })).toEqual(["if-none-match"]);
+  });
+
+  it("catches the other conditional header too, which is the obvious next attempt", () => {
+    expect(nonSafelistedHeaders({ "If-None-Match": '"abc"' })).not.toEqual([]);
+  });
+
+  it("does not quietly widen the safelist", () => {
+    expect([...CORS_SAFELISTED_REQUEST_HEADERS].sort()).toEqual(
+      ["accept", "accept-language", "content-language", "content-type", "range"]
+    );
   });
 });
